@@ -1,0 +1,755 @@
+/* ==========================================================================
+   HORLOGE IPAD BASSE CONSOMMATION — FEUILLE DE STYLE
+   Fond noir pur #000000 (OLED & LCD Dark Backlight friendly)
+   Animations GPU réduites au strict minimum pour économiser la batterie
+   ========================================================================== */
+
+:root {
+  --bg-color: #000000;
+  --fg-color: #f5f5f7;
+  --fg-muted: rgba(245, 245, 247, 0.36);
+  --fg-dim: rgba(245, 245, 247, 0.14);
+  --card-bg: #111113;
+  --card-border: rgba(255, 255, 255, 0.08);
+  --accent-red: #ff3b30;
+  --clock-scale: 1;
+}
+
+/* Thèmes de couleurs */
+body.theme-white {
+  --fg-color: #f5f5f7;
+  --fg-muted: rgba(245, 245, 247, 0.36);
+  --fg-dim: rgba(245, 245, 247, 0.12);
+  --card-bg: #101012;
+}
+
+body.theme-red {
+  --fg-color: #ff2a2a;
+  --fg-muted: rgba(255, 42, 42, 0.38);
+  --fg-dim: rgba(255, 42, 42, 0.11);
+  --card-bg: #120404;
+}
+
+body.theme-amber {
+  --fg-color: #ff9500;
+  --fg-muted: rgba(255, 149, 0, 0.38);
+  --fg-dim: rgba(255, 149, 0, 0.12);
+  --card-bg: #130b02;
+}
+
+body.theme-green {
+  --fg-color: #30d158;
+  --fg-muted: rgba(48, 209, 88, 0.38);
+  --fg-dim: rgba(48, 209, 88, 0.12);
+  --card-bg: #041207;
+}
+
+body.theme-cyan {
+  --fg-color: #5ac8fa;
+  --fg-muted: rgba(90, 200, 250, 0.38);
+  --fg-dim: rgba(90, 200, 250, 0.12);
+  --card-bg: #041016;
+}
+
+body.theme-sepia {
+  --fg-color: #e6d5b8;
+  --fg-muted: rgba(230, 213, 184, 0.38);
+  --fg-dim: rgba(230, 213, 184, 0.12);
+  --card-bg: #12100c;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-color);
+  color: var(--fg-color);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+/* Couche d'assombrissement logiciel (Dimmer) */
+#dimmer-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: #000000;
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* Scène principale avec Pixel Shift */
+#clock-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top, 20px) env(safe-area-inset-right, 24px) env(safe-area-inset-bottom, 20px) env(safe-area-inset-left, 24px);
+  transition: transform 1.5s ease;
+}
+
+/* En-tête Date & Statuts */
+.info-bar {
+  position: absolute;
+  top: max(28px, env(safe-area-inset-top, 28px));
+  left: 44px;
+  right: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--fg-muted);
+  font-size: clamp(1rem, 2.2vw, 1.45rem);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: capitalize;
+}
+
+.info-bar.hidden {
+  display: none !important;
+}
+
+.badges {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.badge {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--fg-dim);
+  color: var(--fg-muted);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+
+/* Cadrans d'horloge */
+.clock-face {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  transform: scale(var(--clock-scale));
+}
+
+.clock-face.active {
+  display: flex;
+}
+
+/* ==========================================================================
+   1. HORLOGE DIGITALE GÉANTE MINIMALISTE
+   ========================================================================== */
+.digital-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+}
+
+.dig-num {
+  font-size: clamp(6rem, 27vw, 24rem);
+  font-weight: 700;
+}
+
+.dig-sep {
+  font-size: clamp(5rem, 22vw, 20rem);
+  font-weight: 300;
+  color: var(--fg-muted);
+  margin: 0 0.04em;
+  transform: translateY(-0.06em);
+}
+
+.dig-sec {
+  font-size: clamp(2rem, 7vw, 6.2rem);
+  font-weight: 500;
+  color: var(--fg-muted);
+  margin-left: 0.18em;
+  min-width: 1.3em;
+}
+
+/* ==========================================================================
+   2. HORLOGE FLIP CLOCK (VOLETS RÉTRO)
+   ========================================================================== */
+.flip-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 2.5vw, 32px);
+  font-variant-numeric: tabular-nums;
+}
+
+.flip-card {
+  position: relative;
+  background-color: var(--card-bg);
+  border: 1px solid var(--fg-dim);
+  border-radius: clamp(16px, 2.6vw, 32px);
+  width: clamp(130px, 34vw, 360px);
+  height: clamp(150px, 38vw, 400px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.flip-card-inner {
+  font-size: clamp(5.2rem, 21vw, 17rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.flip-card-sec {
+  width: clamp(78px, 16vw, 175px);
+  height: clamp(92px, 19vw, 210px);
+  align-self: flex-end;
+  border-radius: clamp(12px, 1.8vw, 22px);
+}
+
+.flip-card-sec .flip-card-inner {
+  font-size: clamp(2.5rem, 9vw, 7.5rem);
+  color: var(--fg-muted);
+}
+
+/* Ligne horizontale médiane caractéristique des horloges à volets */
+.flip-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  background-color: #000000;
+  z-index: 3;
+}
+
+.flip-label {
+  position: absolute;
+  bottom: clamp(8px, 1.4vw, 16px);
+  right: clamp(12px, 1.8vw, 22px);
+  font-size: clamp(0.6rem, 1vw, 0.85rem);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--fg-muted);
+  opacity: 0.55;
+}
+
+/* ==========================================================================
+   3. HORLOGE ANALOGIQUE STYLE GARE SUISSE (CFF / MONDAINE)
+   ========================================================================== */
+.analog-wrapper {
+  width: min(74vw, 72vh);
+  height: min(74vw, 72vh);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#analog-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.analog-rim {
+  fill: none;
+  stroke: var(--fg-dim);
+  stroke-width: 2.2;
+}
+
+.tick-major {
+  stroke: var(--fg-color);
+  stroke-width: 4.4;
+  stroke-linecap: butt;
+}
+
+.tick-minor {
+  stroke: var(--fg-muted);
+  stroke-width: 1.5;
+  stroke-linecap: butt;
+}
+
+.hand-hour {
+  stroke: var(--fg-color);
+  stroke-width: 7.2;
+  stroke-linecap: square;
+}
+
+.hand-minute {
+  stroke: var(--fg-color);
+  stroke-width: 5.2;
+  stroke-linecap: square;
+}
+
+.hand-second {
+  stroke: var(--accent-red);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.hand-second-lollipop {
+  fill: var(--accent-red);
+}
+
+body.theme-red .hand-second,
+body.theme-red .hand-second-lollipop {
+  stroke: var(--fg-color);
+  fill: var(--fg-color);
+}
+
+.analog-center-cap {
+  fill: var(--bg-color);
+  stroke: var(--fg-color);
+  stroke-width: 2.5;
+}
+
+/* ==========================================================================
+   4. HORLOGE EN TOUTES LETTRES (QLOCKTWO FRANÇAIS 11x10)
+   ========================================================================== */
+.word-clock-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+}
+
+.word-grid {
+  display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  gap: clamp(6px, 1.35vw, 18px) clamp(8px, 1.9vw, 26px);
+  padding: clamp(18px, 3vw, 38px);
+  border-radius: 24px;
+  background-color: var(--card-bg);
+  border: 1px solid var(--fg-dim);
+}
+
+.word-cell {
+  font-size: clamp(1.2rem, 3.3vw, 2.75rem);
+  font-weight: 700;
+  text-align: center;
+  color: var(--fg-dim);
+  line-height: 1.1;
+  transition: color 0.3s ease;
+}
+
+.word-cell.lit {
+  color: var(--fg-color);
+  text-shadow: 0 0 14px var(--fg-dim);
+}
+
+.word-dots {
+  display: flex;
+  gap: 22px;
+}
+
+.w-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--fg-dim);
+}
+
+.w-dot.lit {
+  background-color: var(--fg-color);
+  box-shadow: 0 0 8px var(--fg-color);
+}
+
+/* ==========================================================================
+   5. HORLOGE LED / 7-SEGMENTS & NIXIE
+   ========================================================================== */
+.segment-wrapper {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 18px;
+  font-family: "Courier New", "SF Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.segment-box, .segment-sec-box {
+  position: relative;
+  display: inline-block;
+}
+
+.segment-ghost, .segment-live {
+  font-size: clamp(5.5rem, 23vw, 20rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.segment-ghost-sec, .segment-live-sec {
+  font-size: clamp(2.4rem, 8.5vw, 7rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.segment-ghost, .segment-ghost-sec {
+  color: var(--fg-dim);
+  opacity: 0.45;
+}
+
+.segment-live, .segment-live-sec {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--fg-color);
+  text-shadow: 0 0 24px var(--fg-dim);
+}
+
+.segment-live-sec {
+  color: var(--fg-muted);
+}
+
+/* ==========================================================================
+   6. HORLOGE ANNEAUX CONCENTRIQUES
+   ========================================================================== */
+.rings-wrapper {
+  position: relative;
+  width: min(74vw, 72vh);
+  height: min(74vw, 72vh);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rings-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--fg-dim);
+  stroke-width: 10;
+}
+
+.ring-progress {
+  fill: none;
+  stroke: var(--fg-color);
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+.ring-m {
+  stroke: var(--fg-muted);
+}
+
+.ring-s {
+  stroke: var(--accent-red);
+  stroke-width: 6;
+}
+
+body.theme-red .ring-s {
+  stroke: var(--fg-color);
+}
+
+.rings-center-text {
+  position: absolute;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.ring-hm {
+  font-size: clamp(2.8rem, 9.5vw, 6.8rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.ring-s-label {
+  font-size: clamp(1rem, 3vw, 2rem);
+  color: var(--fg-muted);
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   INDICE ET PANNEAU DE CONFIGURATION ESCAMOTABLE
+   ========================================================================== */
+.tap-hint {
+  position: fixed;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: rgba(20, 20, 22, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+  z-index: 40;
+}
+
+.tap-hint.fade-out {
+  opacity: 0;
+}
+
+.controls-panel {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.controls-panel.hidden,
+.modal.hidden,
+.hidden {
+  display: none !important;
+}
+
+.controls-card {
+  width: min(760px, 96vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #141417;
+  color: #f5f5f7;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
+}
+
+.controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.controls-header h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-chip {
+  background: #242429;
+  color: #f5f5f7;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.action-chip:active {
+  transform: scale(0.97);
+}
+
+.close-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #242429;
+  color: #f5f5f7;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.group-label {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #a1a1a6;
+  font-weight: 600;
+}
+
+/* Grille de styles */
+.style-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 9px;
+}
+
+.style-btn {
+  background: #1e1e24;
+  color: #d1d1d6;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.style-btn .style-icon {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.style-btn.active {
+  background: #f5f5f7;
+  color: #000000;
+  border-color: #ffffff;
+  font-weight: 600;
+}
+
+/* Pastilles de couleurs */
+.color-row {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.color-dot {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background-color: var(--dot-color);
+  border: 3px solid transparent;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.color-dot.active {
+  border-color: #000000;
+  box-shadow: 0 0 0 3px #ffffff;
+}
+
+/* Sliders */
+.control-row-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: #f5f5f7;
+  height: 6px;
+  cursor: pointer;
+}
+
+/* Interrupteurs (Toggles) */
+.toggles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.toggle-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  background: #1c1c21;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 11px 13px;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.toggle-item input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: #30d158;
+}
+
+.toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toggle-text strong {
+  font-size: 0.9rem;
+  color: #f5f5f7;
+}
+
+.toggle-text small {
+  font-size: 0.76rem;
+  color: #98989d;
+  line-height: 1.3;
+}
+
+/* Modale Guide iPad */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 200;
+}
+
+.modal-card {
+  width: min(620px, 95vw);
+  background: #18181c;
+  color: #f5f5f7;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 22px;
+  padding: 24px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.guide-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  line-height: 1.5;
+  font-size: 0.94rem;
+  color: #d1d1d6;
+}
+
+.guide-steps strong {
+  color: #ffffff;
+  display: block;
+  margin-bottom: 3px;
+}
+
