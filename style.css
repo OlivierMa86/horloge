@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HORLOGE IPAD BASSE CONSOMMATION — FEUILLE DE STYLE
+   HORLOGE IPAD BASSE CONSOMMATION + STATION MÉTÉO — FEUILLE DE STYLE
    Fond noir pur #000000 (OLED & LCD Dark Backlight friendly)
    Animations GPU réduites au strict minimum pour économiser la batterie
    ========================================================================== */
@@ -7,7 +7,7 @@
 :root {
   --bg-color: #000000;
   --fg-color: #f5f5f7;
-  --fg-muted: rgba(245, 245, 247, 0.36);
+  --fg-muted: rgba(245, 245, 247, 0.42);
   --fg-dim: rgba(245, 245, 247, 0.14);
   --card-bg: #111113;
   --card-border: rgba(255, 255, 255, 0.08);
@@ -18,42 +18,42 @@
 /* Thèmes de couleurs */
 body.theme-white {
   --fg-color: #f5f5f7;
-  --fg-muted: rgba(245, 245, 247, 0.36);
+  --fg-muted: rgba(245, 245, 247, 0.44);
   --fg-dim: rgba(245, 245, 247, 0.12);
   --card-bg: #101012;
 }
 
 body.theme-red {
   --fg-color: #ff2a2a;
-  --fg-muted: rgba(255, 42, 42, 0.38);
-  --fg-dim: rgba(255, 42, 42, 0.11);
+  --fg-muted: rgba(255, 42, 42, 0.45);
+  --fg-dim: rgba(255, 42, 42, 0.12);
   --card-bg: #120404;
 }
 
 body.theme-amber {
   --fg-color: #ff9500;
-  --fg-muted: rgba(255, 149, 0, 0.38);
+  --fg-muted: rgba(255, 149, 0, 0.45);
   --fg-dim: rgba(255, 149, 0, 0.12);
   --card-bg: #130b02;
 }
 
 body.theme-green {
   --fg-color: #30d158;
-  --fg-muted: rgba(48, 209, 88, 0.38);
+  --fg-muted: rgba(48, 209, 88, 0.45);
   --fg-dim: rgba(48, 209, 88, 0.12);
   --card-bg: #041207;
 }
 
 body.theme-cyan {
   --fg-color: #5ac8fa;
-  --fg-muted: rgba(90, 200, 250, 0.38);
+  --fg-muted: rgba(90, 200, 250, 0.45);
   --fg-dim: rgba(90, 200, 250, 0.12);
   --card-bg: #041016;
 }
 
 body.theme-sepia {
   --fg-color: #e6d5b8;
-  --fg-muted: rgba(230, 213, 184, 0.38);
+  --fg-muted: rgba(230, 213, 184, 0.45);
   --fg-dim: rgba(230, 213, 184, 0.12);
   --card-bg: #12100c;
 }
@@ -65,6 +65,11 @@ body.theme-sepia {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
+}
+
+input[type="text"] {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 html, body {
@@ -100,34 +105,89 @@ html, body {
   transition: transform 1.5s ease;
 }
 
-/* En-tête Date & Statuts */
+/* En-tête Date, Météo & Statuts */
 .info-bar {
   position: absolute;
-  top: max(28px, env(safe-area-inset-top, 28px));
-  left: 44px;
-  right: 44px;
+  top: max(22px, env(safe-area-inset-top, 22px));
+  left: 36px;
+  right: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   color: var(--fg-muted);
-  font-size: clamp(1rem, 2.2vw, 1.45rem);
+  font-size: clamp(0.95rem, 2vw, 1.35rem);
   font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: capitalize;
+  letter-spacing: 0.03em;
+  z-index: 10;
 }
 
 .info-bar.hidden {
   display: none !important;
 }
 
+.top-left-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 22px;
+}
+
+.date-text {
+  text-transform: capitalize;
+  font-weight: 600;
+  color: var(--fg-color);
+  opacity: 0.82;
+}
+
+/* Pilule météo présente sur toutes les horloges */
+.weather-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background-color: var(--card-bg);
+  border: 1px solid var(--fg-dim);
+  font-size: clamp(0.88rem, 1.65vw, 1.15rem);
+  color: var(--fg-color);
+}
+
+.wm-icon {
+  font-size: 1.15em;
+}
+
+.wm-temp {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.wm-desc {
+  color: var(--fg-muted);
+}
+
+.wm-minmax {
+  color: var(--fg-muted);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+.wm-city {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+  padding-left: 6px;
+  border-left: 1px solid var(--fg-dim);
+}
+
 .badges {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
 .badge {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--fg-dim);
@@ -227,7 +287,6 @@ html, body {
   color: var(--fg-muted);
 }
 
-/* Ligne horizontale médiane caractéristique des horloges à volets */
 .flip-line {
   position: absolute;
   left: 0;
@@ -479,6 +538,206 @@ body.theme-red .ring-s {
 }
 
 /* ==========================================================================
+   7. HORLOGE STATION MÉTÉO COMPLÈTE
+   ========================================================================== */
+.station-layout {
+  width: min(1080px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2.8vh, 28px);
+  margin-top: 26px;
+}
+
+.station-top {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: clamp(16px, 2.5vw, 28px);
+  align-items: stretch;
+}
+
+@media (max-width: 720px) {
+  .station-top {
+    grid-template-columns: 1fr;
+  }
+}
+
+.station-clock-block {
+  background-color: var(--card-bg);
+  border: 1px solid var(--fg-dim);
+  border-radius: 26px;
+  padding: clamp(18px, 3vw, 34px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.station-time-row {
+  display: flex;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.st-num {
+  font-size: clamp(4.2rem, 12.5vw, 9.5rem);
+  font-weight: 800;
+}
+
+.st-sep {
+  font-size: clamp(3.6rem, 10vw, 8rem);
+  font-weight: 300;
+  color: var(--fg-muted);
+  margin: 0 0.05em;
+}
+
+.st-sec {
+  font-size: clamp(1.5rem, 3.8vw, 3.1rem);
+  font-weight: 600;
+  color: var(--fg-muted);
+  margin-left: 0.2em;
+  min-width: 1.3em;
+}
+
+.st-date-label {
+  margin-top: 12px;
+  font-size: clamp(1.05rem, 2.1vw, 1.55rem);
+  color: var(--fg-muted);
+  text-transform: capitalize;
+  font-weight: 500;
+}
+
+.station-current-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--fg-dim);
+  border-radius: 26px;
+  padding: clamp(18px, 2.6vw, 30px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.st-city-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.st-city-name {
+  font-size: clamp(1.2rem, 2.4vw, 1.8rem);
+  font-weight: 700;
+}
+
+.st-updated {
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+}
+
+.st-main-weather {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.st-big-icon {
+  font-size: clamp(3.2rem, 7vw, 5.2rem);
+  line-height: 1;
+}
+
+.st-temp-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.st-big-temp {
+  font-size: clamp(2.6rem, 6vw, 4.5rem);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.st-condition-text {
+  font-size: clamp(0.95rem, 1.8vw, 1.3rem);
+  color: var(--fg-muted);
+  margin-top: 4px;
+}
+
+.st-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--fg-dim);
+}
+
+.st-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.st-m-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+}
+
+.st-m-val {
+  font-size: clamp(0.9rem, 1.5vw, 1.15rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.station-forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(10px, 1.8vw, 20px);
+}
+
+.forecast-day-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--fg-dim);
+  border-radius: 20px;
+  padding: clamp(12px, 1.8vw, 20px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.fc-day-name {
+  font-size: clamp(0.88rem, 1.5vw, 1.1rem);
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.fc-icon {
+  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  margin: 2px 0;
+}
+
+.fc-temps {
+  font-size: clamp(0.95rem, 1.6vw, 1.2rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-temp-min {
+  color: var(--fg-muted);
+  font-weight: 500;
+}
+
+.fc-desc {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+}
+
+/* ==========================================================================
    INDICE ET PANNEAU DE CONFIGURATION ESCAMOTABLE
    ========================================================================== */
 .tap-hint {
@@ -522,8 +781,8 @@ body.theme-red .ring-s {
 }
 
 .controls-card {
-  width: min(760px, 96vw);
-  max-height: 88vh;
+  width: min(800px, 96vw);
+  max-height: 90vh;
   overflow-y: auto;
   background: #141417;
   color: #f5f5f7;
@@ -532,7 +791,7 @@ body.theme-red .ring-s {
   padding: 22px 24px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
 }
 
@@ -559,11 +818,18 @@ body.theme-red .ring-s {
   background: #242429;
   color: #f5f5f7;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  padding: 7px 13px;
+  padding: 8px 14px;
   border-radius: 999px;
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.primary-chip {
+  background: #f5f5f7;
+  color: #000000;
+  font-weight: 600;
 }
 
 .action-chip:active {
@@ -584,22 +850,50 @@ body.theme-red .ring-s {
 .control-group {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
 }
 
 .group-label {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #a1a1a6;
   font-weight: 600;
 }
 
+/* Champ ville météo */
+.weather-config-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.city-input {
+  flex: 1;
+  min-width: 180px;
+  background: #1e1e24;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 9px 14px;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.city-input:focus {
+  border-color: #ffffff;
+}
+
+.weather-status-msg {
+  font-size: 0.8rem;
+  color: #98989d;
+}
+
 /* Grille de styles */
 .style-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
-  gap: 9px;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
 }
 
 .style-btn {
@@ -607,12 +901,12 @@ body.theme-red .ring-s {
   color: #d1d1d6;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
-  padding: 10px 8px;
+  padding: 10px 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 500;
   cursor: pointer;
 }
@@ -639,8 +933,8 @@ body.theme-red .ring-s {
 }
 
 .color-dot {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background-color: var(--dot-color);
   border: 3px solid transparent;
@@ -670,7 +964,7 @@ input[type="range"] {
 /* Interrupteurs (Toggles) */
 .toggles-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 10px;
 }
 
@@ -680,7 +974,7 @@ input[type="range"] {
   gap: 11px;
   background: #1c1c21;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  padding: 11px 13px;
+  padding: 10px 12px;
   border-radius: 14px;
   cursor: pointer;
 }
@@ -699,12 +993,12 @@ input[type="range"] {
 }
 
 .toggle-text strong {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   color: #f5f5f7;
 }
 
 .toggle-text small {
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   color: #98989d;
   line-height: 1.3;
 }
@@ -752,4 +1046,3 @@ input[type="range"] {
   display: block;
   margin-bottom: 3px;
 }
-

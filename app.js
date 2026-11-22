@@ -1,29 +1,38 @@
 /**
- * HORLOGE IPAD BASSE CONSOMMATION (iPad 8 & modèles suivants)
+ * HORLOGE IPAD BASSE CONSOMMATION + STATION MÉTÉO (iPad 8 & modèles suivants)
  * - Rafraîchissement adaptatif : 1 Hz normal, ou 1/60 Hz (1 fois par minute) en mode Ultra-Éco
- * - Anti-veille : Screen Wake Lock API + fallback audio inaudible pour anciens iPadOS
+ * - Météo Open-Meteo (sans clé API) actualisée toutes les 30 minutes :
+ *   1) Pilule météo en haut sur TOUS les styles d'horloge
+ *   2) Mode dédié "Station Météo" avec prévisions 4 jours, ressenti, vent et humidité
+ * - Anti-veille : Screen Wake Lock API + fallback audio inaudible
  * - Anti-brûlure d'écran (Pixel Shifting) toutes les minutes
- * - 6 styles d'horloges : Digitale, Flip Rétro, Gare Suisse, En Lettres, LED/Nixie, Anneaux
  */
 
 (function () {
   'use strict';
 
-  // --- État et préférences sauvegardées ---
-  const STORAGE_KEY = 'horloge_ipad_prefs_v1';
+  const STORAGE_KEY = 'horloge_ipad_prefs_v2';
+  const WEATHER_CACHE_KEY = 'horloge_ipad_weather_cache_v1';
+  const WEATHER_REFRESH_MS = 30 * 60 * 1000; // 30 minutes pour économiser la batterie
+
   const defaultState = {
-    style: 'digital',      // digital | flip | analog | words | segment | rings
+    style: 'digital',      // digital | weather | flip | analog | words | segment | rings
     theme: 'theme-white',  // theme-white | theme-red | theme-amber | theme-green | theme-cyan | theme-sepia
     brightness: 85,        // 5 à 100 (%)
     scale: 100,            // 60 à 125 (%)
     ecoMode: false,        // true = rafraîchissement 1 fois/minute + secondes masquées
     autoNight: true,       // true = 22h-07h bascule auto en rouge 15%
     showDate: true,
-    use24h: true
+    showWeatherBar: true,  // Affiche le résumé météo en haut sur toutes les horloges
+    use24h: true,
+    city: 'Poitiers',
+    lat: 46.5802,
+    lon: 0.3404
   };
 
   let state = loadState();
   let tickTimer = null;
+  let weatherTimer = null;
   let wakeLockSentinel = null;
   let noSleepAudioCtx = null;
   let hidePanelTimeout = null;
@@ -35,6 +44,12 @@
     stage: document.getElementById('clock-stage'),
     topInfo: document.getElementById('top-info'),
     dateDisplay: document.getElementById('date-display'),
+    weatherMini: document.getElementById('weather-mini'),
+    wmIcon: document.getElementById('wm-icon'),
+    wmTemp: document.getElementById('wm-temp'),
+    wmDesc: document.getElementById('wm-desc'),
+    wmMinmax: document.getElementById('wm-minmax'),
+    wmCity: document.getElementById('wm-city'),
     ecoBadge: document.getElementById('eco-badge'),
     wakeLockBadge: document.getElementById('wakelock-badge'),
     batteryBadge: document.getElementById('battery-badge'),
@@ -74,14 +89,35 @@
     ringTimeText: document.getElementById('ring-time-text'),
     ringSecText: document.getElementById('ring-sec-text'),
 
+    // 7. Station Météo Complète
+    stHours: document.getElementById('st-hours'),
+    stMinutes: document.getElementById('st-minutes'),
+    stSeconds: document.getElementById('st-seconds'),
+    stDate: document.getElementById('st-date'),
+    stCity: document.getElementById('st-city'),
+    stUpdated: document.getElementById('st-updated'),
+    stIcon: document.getElementById('st-icon'),
+    stTemp: document.getElementById('st-temp'),
+    stDesc: document.getElementById('st-desc'),
+    stFeels: document.getElementById('st-feels'),
+    stMinmax: document.getElementById('st-minmax'),
+    stHumidity: document.getElementById('st-humidity'),
+    stWind: document.getElementById('st-wind'),
+    stForecastGrid: document.getElementById('st-forecast-grid'),
+
     // Contrôles
     panel: document.getElementById('controls-panel'),
     styleSelector: document.getElementById('style-selector'),
     themeSelector: document.getElementById('theme-selector'),
+    cityInput: document.getElementById('city-input'),
+    btnSearchCity: document.getElementById('btn-search-city'),
+    btnGeoloc: document.getElementById('btn-geoloc'),
+    weatherStatusMsg: document.getElementById('weather-status-msg'),
     brightnessSlider: document.getElementById('brightness-slider'),
     brightnessVal: document.getElementById('brightness-val'),
     scaleSlider: document.getElementById('scale-slider'),
     scaleVal: document.getElementById('scale-val'),
+    toggleWeather: document.getElementById('toggle-weather'),
     toggleEco: document.getElementById('toggle-eco'),
     toggleAutoNight: document.getElementById('toggle-autonight'),
     toggleDate: document.getElementById('toggle-date'),
@@ -93,21 +129,55 @@
     btnCloseModal: document.getElementById('btn-close-modal')
   };
 
+  // --- Codes météo WMO -> Icône & Description en français ---
+  function decodeWmoWeather(code, isNight = false) {
+    const map = {
+      0: { icon: isNight ? '🌙' : '☀️', label: isNight ? 'Ciel dégagé' : 'Ensoleillé' },
+      1: { icon: isNight ? '🌙' : '🌤️', label: 'Peu nuageux' },
+      2: { icon: '⛅', label: 'Partiellement nuageux' },
+      3: { icon: '☁️', label: 'Couvert' },
+      45: { icon: '🌫️', label: 'Brouillard' },
+      48: { icon: '🌫️', label: 'Brouillard givrant' },
+      51: { icon: '🌦️', label: 'Bruine légère' },
+      53: { icon: '🌦️', label: 'Bruine' },
+      55: { icon: '🌧️', label: 'Bruine dense' },
+      56: { icon: '🌧️', label: 'Bruine verglaçante' },
+      57: { icon: '🌧️', label: 'Bruine verglaçante' },
+      61: { icon: '🌦️', label: 'Pluie faible' },
+      63: { icon: '🌧️', label: 'Pluie modérée' },
+      65: { icon: '🌧️', label: 'Pluie forte' },
+      66: { icon: '🌧️', label: 'Pluie verglaçante' },
+      67: { icon: '🌧️', label: 'Pluie verglaçante' },
+      71: { icon: '🌨️', label: 'Neige faible' },
+      73: { icon: '❄️', label: 'Neige modérée' },
+      75: { icon: '❄️', label: 'Neige forte' },
+      77: { icon: '❄️', label: 'Grains de neige' },
+      80: { icon: '🌦️', label: 'Averses faibles' },
+      81: { icon: '🌧️', label: 'Averses modérées' },
+      82: { icon: '⛈️', label: 'Fortes averses' },
+      85: { icon: '🌨️', label: 'Averses de neige' },
+      86: { icon: '❄️', label: 'Fortes averses neige' },
+      95: { icon: '⛈️', label: 'Orage' },
+      96: { icon: '⛈️', label: 'Orage & grêle' },
+      99: { icon: '⛈️', label: 'Orage fort & grêle' }
+    };
+    return map[code] || { icon: '⛅', label: 'Variable' };
+  }
+
   // --- Matrice de l'horloge en lettres française (11 colonnes x 10 lignes) ---
   const WORD_MATRIX = [
-    'ILNESTODEUX', // Ligne 0 : IL(0-1) EST(3-5) DEUX(7-10)
-    'QUATRETROIS', // Ligne 1 : QUATRE(0-5) TROIS(6-10)
-    'NEUFUNESEPT', // Ligne 2 : NEUF(0-3) UNE(4-6) SEPT(7-10)
-    'HUITSIXCINQ', // Ligne 3 : HUIT(0-3) SIX(4-6) CINQ(7-10)
-    'MIDIXMINUIT', // Ligne 4 : MIDI(0-3) DIX(2-4) MINUIT(5-10)
-    'ONZERHEURES', // Ligne 5 : ONZE(0-3) HEURE(5-9) HEURES(5-10)
-    'MOINSOLEDIX', // Ligne 6 : MOINS(0-4) LE(6-7) DIX(8-10)
-    'ETRQUARTPMD', // Ligne 7 : ET(0-1) QUART(3-7)
-    'VINGT-CINQU', // Ligne 8 : VINGT(0-4) VINGT-CINQ(0-9) CINQ(6-9)
-    'ETSDEMIEPAM'  // Ligne 9 : ET(0-1) DEMIE(3-7)
+    'ILNESTODEUX',
+    'QUATRETROIS',
+    'NEUFUNESEPT',
+    'HUITSIXCINQ',
+    'MIDIXMINUIT',
+    'ONZERHEURES',
+    'MOINSOLEDIX',
+    'ETRQUARTPMD',
+    'VINGT-CINQU',
+    'ETSDEMIEPAM'
   ];
 
-  // Coordonnées [row, startCol, endCol] pour allumer chaque mot
   const WORDS = {
     IL: [0, 0, 1],
     EST: [0, 3, 5],
@@ -140,7 +210,7 @@
 
   function loadState() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('horloge_ipad_prefs_v1');
       if (!raw) return { ...defaultState };
       return { ...defaultState, ...JSON.parse(raw) };
     } catch (e) {
@@ -152,7 +222,7 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
-      // Ignore storage errors in private mode
+      // Ignore storage errors
     }
   }
 
@@ -163,7 +233,7 @@
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       const isMajor = i % 5 === 0;
       line.setAttribute('x1', '100');
-      line.setAttribute('y1', isMajor ? '12' : '12');
+      line.setAttribute('y1', '12');
       line.setAttribute('x2', '100');
       line.setAttribute('y2', isMajor ? '26' : '18');
       line.setAttribute('class', isMajor ? 'tick-major' : 'tick-minor');
@@ -215,7 +285,6 @@
     const minutes = now.getMinutes();
     const seconds = now.getSeconds();
 
-    // Gestion du mode nuit automatique & Pixel-Shift une fois par minute
     if (minutes !== lastMinuteRendered) {
       lastMinuteRendered = minutes;
       updateDateDisplay(now);
@@ -228,13 +297,20 @@
     const padM = String(minutes).padStart(2, '0');
     const padS = String(seconds).padStart(2, '0');
 
-    // Ne mettre à jour que le cadran actif pour économiser le CPU/GPU
     switch (state.style) {
       case 'digital':
         dom.digHours.textContent = padH;
         dom.digMinutes.textContent = padM;
         if (!state.ecoMode) {
           dom.digSeconds.textContent = padS;
+        }
+        break;
+
+      case 'weather':
+        dom.stHours.textContent = padH;
+        dom.stMinutes.textContent = padM;
+        if (!state.ecoMode) {
+          dom.stSeconds.textContent = padS;
         }
         break;
 
@@ -287,13 +363,11 @@
     const fiveMinStep = Math.floor(minutes / 5) * 5;
     const extraMinutes = minutes % 5;
 
-    // Si on est à 35 min ou plus ("MOINS ..."), on annonce l'heure suivante
     let targetHour = hours24;
     if (fiveMinStep >= 35) {
       targetHour = (hours24 + 1) % 24;
     }
 
-    // Heure
     if (targetHour === 0) {
       activeCoords.push(WORDS.MINUIT);
     } else if (targetHour === 12) {
@@ -317,7 +391,6 @@
       activeCoords.push(h12 === 1 ? WORDS.HEURE : WORDS.HEURES);
     }
 
-    // Minutes par tranche de 5
     switch (fiveMinStep) {
       case 5:
         activeCoords.push(WORDS.CINQ_M);
@@ -335,11 +408,7 @@
         activeCoords.push(WORDS.VINGT_CINQ);
         break;
       case 30:
-        if (targetHour === 0 || targetHour === 12) {
-          activeCoords.push(WORDS.ET_D, WORDS.DEMIE);
-        } else {
-          activeCoords.push(WORDS.ET_D, WORDS.DEMIE);
-        }
+        activeCoords.push(WORDS.ET_D, WORDS.DEMIE);
         break;
       case 35:
         activeCoords.push(WORDS.MOINS, WORDS.VINGT_CINQ);
@@ -358,7 +427,6 @@
         break;
     }
 
-    // Allumer les lettres correspondantes
     const cells = dom.wordGrid.children;
     for (let i = 0; i < cells.length; i++) {
       const cell = cells[i];
@@ -375,7 +443,6 @@
       cell.classList.toggle('lit', isLit);
     }
 
-    // Points des 1 à 4 minutes intermédiaires
     const dots = document.querySelectorAll('.w-dot');
     dots.forEach((dot, idx) => {
       dot.classList.toggle('lit', idx < extraMinutes);
@@ -388,12 +455,179 @@
       day: 'numeric',
       month: 'long'
     });
-    dom.dateDisplay.textContent = formatter.format(now);
+    const formatted = formatter.format(now);
+    dom.dateDisplay.textContent = formatted;
+    dom.stDate.textContent = formatted;
+  }
+
+  // --- Module Météo Basse Consommation (Open-Meteo API gratuite sans clé) ---
+  async function fetchWeather(force = false) {
+    try {
+      // Vérifier le cache local si non forcé
+      if (!force) {
+        const cachedRaw = localStorage.getItem(WEATHER_CACHE_KEY);
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw);
+          if (
+            cached.lat === state.lat &&
+            cached.lon === state.lon &&
+            Date.now() - cached.timestamp < WEATHER_REFRESH_MS
+          ) {
+            renderWeatherData(cached.data);
+            return;
+          }
+        }
+      }
+
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Erreur réseau météo');
+      const data = await response.json();
+
+      localStorage.setItem(
+        WEATHER_CACHE_KEY,
+        JSON.stringify({
+          lat: state.lat,
+          lon: state.lon,
+          timestamp: Date.now(),
+          data
+        })
+      );
+
+      renderWeatherData(data);
+    } catch (err) {
+      // En cas de coupure Wi-Fi, afficher le dernier cache s'il existe
+      const cachedRaw = localStorage.getItem(WEATHER_CACHE_KEY);
+      if (cachedRaw) {
+        try {
+          renderWeatherData(JSON.parse(cachedRaw).data);
+        } catch (e) {}
+      } else {
+        dom.wmDesc.textContent = 'Hors-ligne';
+        dom.stDesc.textContent = 'Météo hors-ligne';
+      }
+    }
+  }
+
+  function renderWeatherData(data) {
+    if (!data || !data.current) return;
+
+    const current = data.current;
+    const daily = data.daily || {};
+    const isNight = current.is_day === 0;
+    const wmo = decodeWmoWeather(current.weather_code, isNight);
+
+    const temp = Math.round(current.temperature_2m);
+    const feels = Math.round(current.apparent_temperature);
+    const humidity = Math.round(current.relative_humidity_2m);
+    const wind = Math.round(current.wind_speed_10m);
+
+    const todayMin = daily.temperature_2m_min ? Math.round(daily.temperature_2m_min[0]) : '--';
+    const todayMax = daily.temperature_2m_max ? Math.round(daily.temperature_2m_max[0]) : '--';
+
+    // 1. Mise à jour de la pilule météo en haut (sur toutes les horloges)
+    dom.wmIcon.textContent = wmo.icon;
+    dom.wmTemp.textContent = `${temp}°C`;
+    dom.wmDesc.textContent = wmo.label;
+    dom.wmMinmax.textContent = `(${todayMin}° / ${todayMax}°)`;
+    dom.wmCity.textContent = state.city;
+
+    // 2. Mise à jour du mode "Station Météo"
+    dom.stCity.textContent = state.city;
+    const nowTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    dom.stUpdated.textContent = `Actualisé à ${nowTime}`;
+    dom.stIcon.textContent = wmo.icon;
+    dom.stTemp.textContent = `${temp}°C`;
+    dom.stDesc.textContent = wmo.label;
+    dom.stFeels.textContent = `${feels}°C`;
+    dom.stMinmax.textContent = `${todayMin}° / ${todayMax}°`;
+    dom.stHumidity.textContent = `${humidity}%`;
+    dom.stWind.textContent = `${wind} km/h`;
+
+    // 3. Prévisions des 4 prochains jours
+    if (daily.time && daily.time.length > 1) {
+      const fragment = document.createDocumentFragment();
+      const dayFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric' });
+      const count = Math.min(5, daily.time.length);
+      for (let i = 1; i < count; i++) {
+        const dateObj = new Date(daily.time[i] + 'T12:00:00');
+        const dayInfo = decodeWmoWeather(daily.weather_code[i], false);
+        const minT = Math.round(daily.temperature_2m_min[i]);
+        const maxT = Math.round(daily.temperature_2m_max[i]);
+
+        const card = document.createElement('div');
+        card.className = 'forecast-day-card';
+        card.innerHTML = `
+          <div class="fc-day-name">${dayFmt.format(dateObj)}</div>
+          <div class="fc-icon">${dayInfo.icon}</div>
+          <div class="fc-temps">${maxT}° <span class="fc-temp-min">/ ${minT}°</span></div>
+          <div class="fc-desc">${dayInfo.label}</div>
+        `;
+        fragment.appendChild(card);
+      }
+      dom.stForecastGrid.innerHTML = '';
+      dom.stForecastGrid.appendChild(fragment);
+    }
+  }
+
+  // Recherche de ville par nom via l'API de géocodage Open-Meteo
+  async function searchCityByName(query) {
+    const trimmed = (query || '').trim();
+    if (!trimmed) return;
+    dom.weatherStatusMsg.textContent = `Recherche de « ${trimmed} »…`;
+    try {
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(trimmed)}&count=1&language=fr&format=json`;
+      const res = await fetch(url);
+      const json = await res.json();
+      if (!json.results || json.results.length === 0) {
+        dom.weatherStatusMsg.textContent = `Aucune ville trouvée pour « ${trimmed} ».`;
+        return;
+      }
+      const place = json.results[0];
+      state.city = place.name;
+      state.lat = place.latitude;
+      state.lon = place.longitude;
+      saveState();
+      dom.cityInput.value = state.city;
+      const region = [place.admin1, place.country].filter(Boolean).join(', ');
+      dom.weatherStatusMsg.textContent = `Ville active : ${state.city} (${region})`;
+      await fetchWeather(true);
+    } catch (err) {
+      dom.weatherStatusMsg.textContent = `Erreur lors de la recherche de la ville.`;
+    }
+  }
+
+  function useGeolocation() {
+    if (!('geolocation' in navigator)) {
+      dom.weatherStatusMsg.textContent = 'Géolocalisation non supportée sur ce navigateur.';
+      return;
+    }
+    dom.weatherStatusMsg.textContent = 'Localisation GPS en cours…';
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        state.lat = Number(pos.coords.latitude.toFixed(4));
+        state.lon = Number(pos.coords.longitude.toFixed(4));
+        state.city = 'Ma position';
+        saveState();
+        dom.cityInput.value = state.city;
+        dom.weatherStatusMsg.textContent = `Position GPS active (${state.lat}, ${state.lon})`;
+        await fetchWeather(true);
+      },
+      () => {
+        dom.weatherStatusMsg.textContent = 'Accès GPS refusé — saisissez le nom de votre ville ci-dessus.';
+      },
+      { timeout: 10000 }
+    );
+  }
+
+  function startWeatherSchedule() {
+    fetchWeather(false);
+    if (weatherTimer) clearInterval(weatherTimer);
+    weatherTimer = setInterval(() => fetchWeather(true), WEATHER_REFRESH_MS);
   }
 
   // --- Protection d'écran (Pixel Shifting) toutes les minutes ---
   function applyPixelShift(minute) {
-    // Déplacement circulaire doux entre -8px et +8px pour éviter toute rémanence sur la dalle
     const angle = (minute % 12) * (Math.PI / 6);
     const dx = Math.round(Math.cos(angle) * 7);
     const dy = Math.round(Math.sin(angle) * 7);
@@ -410,10 +644,8 @@
     const now = new Date();
     let delayMs;
     if (state.ecoMode) {
-      // Mode Ultra-Éco : prochain réveil au début exact de la minute suivante
       delayMs = (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 20;
     } else {
-      // Mode Normal 1 Hz : prochain réveil au début exact de la seconde suivante
       delayMs = 1000 - now.getMilliseconds() + 10;
     }
 
@@ -425,23 +657,24 @@
     const isNightHours = currentHour >= 22 || currentHour < 7;
     const useNightOverride = state.autoNight && isNightHours;
 
-    // Thème de couleur
     dom.body.className = useNightOverride ? 'theme-red' : state.theme;
 
-    // Luminosité logicielle (opacité du voile noir)
     const effectiveBrightness = useNightOverride ? Math.min(state.brightness, 18) : state.brightness;
     const dimmerOpacity = Math.max(0, Math.min(0.95, 1 - effectiveBrightness / 100));
     dom.dimmer.style.opacity = dimmerOpacity.toFixed(2);
 
-    // Taille de l'horloge
     document.documentElement.style.setProperty('--clock-scale', (state.scale / 100).toFixed(2));
 
-    // Visibilité de l'en-tête Date
+    // Visibilité de l'en-tête Date & Météo
     dom.topInfo.classList.toggle('hidden', !state.showDate);
+    // Sur le mode "Station Météo", la météo est déjà affichée en grand au centre
+    const hideMiniWeather = !state.showWeatherBar || state.style === 'weather';
+    dom.weatherMini.classList.toggle('hidden', hideMiniWeather);
 
     // Visibilité des secondes selon le mode Éco
     dom.ecoBadge.classList.toggle('hidden', !state.ecoMode);
     dom.digSeconds.classList.toggle('hidden', state.ecoMode);
+    dom.stSeconds.classList.toggle('hidden', state.ecoMode);
     dom.flipSecondsCard.classList.toggle('hidden', state.ecoMode);
     dom.handSecondGroup.classList.toggle('hidden', state.ecoMode);
     dom.segSecBox.classList.toggle('hidden', state.ecoMode);
@@ -461,10 +694,13 @@
     document.querySelectorAll('.color-dot').forEach((dot) => {
       dot.classList.toggle('active', dot.dataset.theme === state.theme);
     });
+    dom.cityInput.value = state.city;
+    dom.weatherStatusMsg.textContent = `Ville active : ${state.city}`;
     dom.brightnessSlider.value = state.brightness;
     dom.brightnessVal.textContent = `${state.brightness}%`;
     dom.scaleSlider.value = state.scale;
     dom.scaleVal.textContent = `${state.scale}%`;
+    dom.toggleWeather.checked = state.showWeatherBar;
     dom.toggleEco.checked = state.ecoMode;
     dom.toggleAutoNight.checked = state.autoNight;
     dom.toggleDate.checked = state.showDate;
@@ -485,7 +721,6 @@
         updateWakeLockBadge(false);
       }
     }
-    // Fallback silencieux si WakeLock non actif avant interaction tactile
     enableSilentAudioKeepAwake();
   }
 
@@ -495,7 +730,6 @@
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return;
       noSleepAudioCtx = new AudioContextClass();
-      // Impulsion silencieuse toutes les 25 secondes pour éviter la mise en veille WebKit ancienne
       setInterval(() => {
         if (!noSleepAudioCtx || document.hidden) return;
         if (noSleepAudioCtx.state === 'suspended') {
@@ -508,16 +742,14 @@
         source.start(0);
       }, 25000);
       updateWakeLockBadge(true);
-    } catch (e) {
-      // Ignore audio context restrictions
-    }
+    } catch (e) {}
   }
 
   function updateWakeLockBadge(active) {
     dom.wakeLockBadge.textContent = active ? '⚡ Écran maintenu' : '⚡ Touchez pour maintenir';
   }
 
-  // --- Batterie (si disponible) ---
+  // --- Batterie ---
   function initBatteryMonitor() {
     if ('getBattery' in navigator) {
       navigator.getBattery().then((battery) => {
@@ -549,20 +781,21 @@
   function resetAutoCloseTimer() {
     if (hidePanelTimeout) clearTimeout(hidePanelTimeout);
     hidePanelTimeout = setTimeout(() => {
-      if (dom.installModal.classList.contains('hidden')) {
+      if (
+        dom.installModal.classList.contains('hidden') &&
+        document.activeElement !== dom.cityInput
+      ) {
         closeControlsPanel();
       }
-    }, 10000);
+    }, 12000);
   }
 
   function bindEvents() {
-    // Toucher la scène principale ouvre les contrôles et ré-active le WakeLock
     dom.stage.addEventListener('click', () => {
       requestWakeLock();
       openControlsPanel();
     });
 
-    // Fermer en touchant le fond sombre autour de la carte
     dom.panel.addEventListener('click', (e) => {
       if (e.target === dom.panel) {
         closeControlsPanel();
@@ -581,6 +814,23 @@
       saveState();
       applyEffectiveAppearance();
       updateClock();
+    });
+
+    // Recherche de ville météo
+    dom.btnSearchCity.addEventListener('click', () => {
+      searchCityByName(dom.cityInput.value);
+    });
+
+    dom.cityInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        searchCityByName(dom.cityInput.value);
+        dom.cityInput.blur();
+      }
+    });
+
+    dom.btnGeoloc.addEventListener('click', () => {
+      useGeolocation();
     });
 
     // Changement de couleur / thème
@@ -606,6 +856,13 @@
       applyEffectiveAppearance();
     });
 
+    // Afficher la météo sur toutes les horloges
+    dom.toggleWeather.addEventListener('change', (e) => {
+      state.showWeatherBar = e.target.checked;
+      saveState();
+      applyEffectiveAppearance();
+    });
+
     // Mode Ultra-Éco (1/min)
     dom.toggleEco.addEventListener('change', (e) => {
       state.ecoMode = e.target.checked;
@@ -621,7 +878,7 @@
       applyEffectiveAppearance();
     });
 
-    // Afficher la date
+    // Afficher la barre supérieure
     dom.toggleDate.addEventListener('change', (e) => {
       state.showDate = e.target.checked;
       saveState();
@@ -635,7 +892,7 @@
       updateClock();
     });
 
-    // Bouton Plein écran (Safari iPadOS Fullscreen API)
+    // Bouton Plein écran
     dom.btnFullscreen.addEventListener('click', () => {
       const docEl = document.documentElement;
       const requestFs = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
@@ -667,23 +924,21 @@
       }
     });
 
-    // Ré-acquérir le WakeLock quand l'application revient au premier plan
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         requestWakeLock();
         scheduleNextTick();
+        fetchWeather(false);
       }
     });
   }
 
-  // --- Enregistrement du Service Worker pour fonctionnement 100% hors-ligne ---
   function registerServiceWorker() {
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
   }
 
-  // --- Démarrage ---
   function init() {
     initAnalogClock();
     initWordClock();
@@ -691,11 +946,11 @@
     applyEffectiveAppearance();
     bindEvents();
     scheduleNextTick();
+    startWeatherSchedule();
     requestWakeLock();
     initBatteryMonitor();
     registerServiceWorker();
 
-    // Estomper l'indice de démarrage après 4,5 secondes
     setTimeout(() => {
       dom.tapHint.classList.add('fade-out');
     }, 4500);
@@ -703,4 +958,3 @@
 
   init();
 })();
-

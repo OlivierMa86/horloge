@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Horloge iPad — Basse Consommation</title>
-  <meta name="description" content="Horloge permanente ultra basse consommation pour iPad">
+  <title>Horloge iPad — Basse Consommation & Météo</title>
+  <meta name="description" content="Horloge permanente ultra basse consommation avec météo pour iPad">
   
   <!-- PWA & iPad Fullscreen Meta Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -25,9 +25,19 @@
   <!-- Conteneur principal avec Pixel-Shift anti burn-in -->
   <main id="clock-stage" aria-live="off">
     
-    <!-- Barre d'état minimale optionnelle (Date + Batterie + Statut WakeLock) -->
+    <!-- Barre d'état supérieure (Date + Résumé Météo + Statuts) -->
     <header id="top-info" class="info-bar">
-      <div id="date-display" class="date-text">Dimanche 22 Novembre</div>
+      <div class="top-left-group">
+        <div id="date-display" class="date-text">Dimanche 22 Novembre</div>
+        <div id="weather-mini" class="weather-mini" title="Météo actuelle (actualisée toutes les 30 min)">
+          <span id="wm-icon" class="wm-icon">⛅</span>
+          <span id="wm-temp" class="wm-temp">--°C</span>
+          <span id="wm-desc" class="wm-desc">Chargement…</span>
+          <span id="wm-minmax" class="wm-minmax"></span>
+          <span id="wm-city" class="wm-city"></span>
+        </div>
+      </div>
+
       <div id="status-badges" class="badges">
         <span id="eco-badge" class="badge hidden" title="Mode Éco 1/min actif">ÉCO 1/min</span>
         <span id="wakelock-badge" class="badge" title="Maintien d'écran allumé">⚡ Veille bloquée</span>
@@ -76,20 +86,14 @@
     <section id="clock-analog" class="clock-face">
       <div class="analog-wrapper">
         <svg id="analog-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-          <!-- Cadran extérieur -->
           <circle cx="100" cy="100" r="94" class="analog-rim" />
-          <!-- Graduations générées en JS -->
           <g id="analog-ticks"></g>
-          <!-- Aiguille des heures -->
           <line id="hand-hour" x1="100" y1="116" x2="100" y2="42" class="hand hand-hour" />
-          <!-- Aiguille des minutes -->
           <line id="hand-minute" x1="100" y1="122" x2="100" y2="20" class="hand hand-minute" />
-          <!-- Aiguille des secondes (style CFF / Gare suisse avec pastille rouge) -->
           <g id="hand-second-group" class="hand-second-group">
             <line x1="100" y1="128" x2="100" y2="33" class="hand hand-second" />
             <circle cx="100" cy="33" r="6.5" class="hand-second-lollipop" />
           </g>
-          <!-- Pivot central -->
           <circle cx="100" cy="100" r="4.5" class="analog-center-cap" />
         </svg>
       </div>
@@ -126,11 +130,9 @@
     <section id="clock-rings" class="clock-face">
       <div class="rings-wrapper">
         <svg viewBox="0 0 240 240" class="rings-svg">
-          <!-- Pistes de fond -->
           <circle cx="120" cy="120" r="102" class="ring-track" />
           <circle cx="120" cy="120" r="84" class="ring-track" />
           <circle id="ring-sec-track" cx="120" cy="120" r="66" class="ring-track" />
-          <!-- Anneaux dynamiques -->
           <circle id="ring-hours" cx="120" cy="120" r="102" class="ring-progress ring-h" />
           <circle id="ring-minutes" cx="120" cy="120" r="84" class="ring-progress ring-m" />
           <circle id="ring-seconds" cx="120" cy="120" r="66" class="ring-progress ring-s" />
@@ -142,31 +144,90 @@
       </div>
     </section>
 
+    <!-- 7. HORLOGE STATION MÉTÉO COMPLÈTE -->
+    <section id="clock-weather" class="clock-face">
+      <div class="station-layout">
+        <!-- Partie haute : Heure grand format + Météo en direct -->
+        <div class="station-top">
+          <div class="station-clock-block">
+            <div class="station-time-row">
+              <span id="st-hours" class="st-num">12</span>
+              <span class="st-sep">:</span>
+              <span id="st-minutes" class="st-num">00</span>
+              <span id="st-seconds" class="st-sec">00</span>
+            </div>
+            <div id="st-date" class="st-date-label">Dimanche 22 Novembre</div>
+          </div>
+
+          <div class="station-current-card">
+            <div class="st-city-row">
+              <span id="st-city" class="st-city-name">Poitiers</span>
+              <span id="st-updated" class="st-updated">Météo en direct</span>
+            </div>
+            <div class="st-main-weather">
+              <span id="st-icon" class="st-big-icon">⛅</span>
+              <div class="st-temp-col">
+                <span id="st-temp" class="st-big-temp">--°C</span>
+                <span id="st-desc" class="st-condition-text">Chargement…</span>
+              </div>
+            </div>
+            <div class="st-metrics-row">
+              <div class="st-metric">
+                <span class="st-m-label">Ressenti</span>
+                <span id="st-feels" class="st-m-val">--°C</span>
+              </div>
+              <div class="st-metric">
+                <span class="st-m-label">Min / Max</span>
+                <span id="st-minmax" class="st-m-val">--° / --°</span>
+              </div>
+              <div class="st-metric">
+                <span class="st-m-label">Humidité</span>
+                <span id="st-humidity" class="st-m-val">--%</span>
+              </div>
+              <div class="st-metric">
+                <span class="st-m-label">Vent</span>
+                <span id="st-wind" class="st-m-val">-- km/h</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Partie basse : Prévisions sur 4 jours -->
+        <div id="st-forecast-grid" class="station-forecast-grid">
+          <!-- Généré dynamiquement par app.js -->
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- Indice discret au démarrage -->
-  <div id="tap-hint" class="tap-hint">Touchez l'écran pour personnaliser l'horloge</div>
+  <div id="tap-hint" class="tap-hint">Touchez l'écran pour changer d'horloge ou régler la météo</div>
 
-  <!-- Barre de contrôle escamotable (s'affiche au toucher, disparaît après 5s) -->
+  <!-- Barre de contrôle escamotable -->
   <aside id="controls-panel" class="controls-panel hidden" aria-label="Paramètres de l'horloge">
     <div class="controls-card">
       
       <div class="controls-header">
-        <h2>Configuration de l'Horloge</h2>
+        <h2>Configuration de l'Horloge & Météo</h2>
         <div class="header-actions">
           <button id="btn-fullscreen" class="action-chip" type="button">⛶ Plein écran</button>
-          <button id="btn-install-help" class="action-chip" type="button">📲 Installer sur iPad</button>
+          <button id="btn-install-help" class="action-chip" type="button">📲 Aide iPad</button>
           <button id="btn-close-panel" class="close-btn" type="button" aria-label="Fermer">✕</button>
         </div>
       </div>
 
-      <!-- Sélecteur de style d'horloge -->
+      <!-- Sélecteur de style d'horloge (7 styles dont Station Météo) -->
       <div class="control-group">
         <label class="group-label">Style d'horloge</label>
         <div class="style-grid" id="style-selector">
           <button type="button" class="style-btn active" data-style="digital">
             <span class="style-icon">12:00</span>
             <span>Digitale</span>
+          </button>
+          <button type="button" class="style-btn" data-style="weather">
+            <span class="style-icon">⛅</span>
+            <span>Station Météo</span>
           </button>
           <button type="button" class="style-btn" data-style="flip">
             <span class="style-icon">▯▯</span>
@@ -191,12 +252,23 @@
         </div>
       </div>
 
+      <!-- Configuration de la ville pour la météo -->
+      <div class="control-group">
+        <label class="group-label" for="city-input">Ville pour la météo (actualisée toutes les 30 min)</label>
+        <div class="weather-config-row">
+          <input type="text" id="city-input" class="city-input" placeholder="Ex: Poitiers, Paris, Lyon, Bordeaux…" autocomplete="off">
+          <button type="button" id="btn-search-city" class="action-chip primary-chip">🔍 Rechercher</button>
+          <button type="button" id="btn-geoloc" class="action-chip" title="Utiliser la position GPS de l'iPad">📍 Ma position</button>
+        </div>
+        <div id="weather-status-msg" class="weather-status-msg">Ville active : Poitiers</div>
+      </div>
+
       <!-- Sélecteur de couleur / thème nocturne -->
       <div class="control-group">
         <label class="group-label">Couleur & Mode Nuit (Fond noir #000000 basse conso)</label>
         <div class="color-row" id="theme-selector">
           <button type="button" class="color-dot active" data-theme="theme-white" style="--dot-color: #f5f5f7;" title="Blanc Pur"></button>
-          <button type="button" class="color-dot" data-theme="theme-red" style="--dot-color: #ff2a2a;" title="Rouge Nuit Profonde (Très faible impact lumineux)"></button>
+          <button type="button" class="color-dot" data-theme="theme-red" style="--dot-color: #ff2a2a;" title="Rouge Nuit Profonde"></button>
           <button type="button" class="color-dot" data-theme="theme-amber" style="--dot-color: #ff9500;" title="Ambre / Nixie"></button>
           <button type="button" class="color-dot" data-theme="theme-green" style="--dot-color: #30d158;" title="Vert Phosphore"></button>
           <button type="button" class="color-dot" data-theme="theme-cyan" style="--dot-color: #5ac8fa;" title="Bleu Cyan"></button>
@@ -223,6 +295,14 @@
       <!-- Options d'économie d'énergie et d'affichage -->
       <div class="toggles-grid">
         <label class="toggle-item">
+          <input type="checkbox" id="toggle-weather" checked>
+          <span class="toggle-text">
+            <strong>Afficher la météo sur toutes les horloges</strong>
+            <small>Affiche température, ciel et min/max en haut de l'écran</small>
+          </span>
+        </label>
+
+        <label class="toggle-item">
           <input type="checkbox" id="toggle-eco">
           <span class="toggle-text">
             <strong>Mode Ultra-Éco (1/min)</strong>
@@ -241,8 +321,8 @@
         <label class="toggle-item">
           <input type="checkbox" id="toggle-date" checked>
           <span class="toggle-text">
-            <strong>Afficher la date & statut</strong>
-            <small>En-tête avec date en français et état de veille</small>
+            <strong>Afficher la barre supérieure (Date & Statut)</strong>
+            <small>En-tête avec date en français, météo et état de veille</small>
           </span>
         </label>
 
@@ -272,13 +352,13 @@
             Dans Safari sur l'iPad, touchez le bouton <strong>Partager</strong> (carré avec une flèche vers le haut) puis choisissez <strong>« Sur l'écran d'accueil »</strong>. Lancez ensuite l'application depuis sa nouvelle icône.
           </li>
           <li>
-            <strong>2. Maintien de l'écran allumé (Anti-veille) :</strong>
-            L'application active automatiquement l'API <em>Screen Wake Lock</em> (prise en charge sur iPadOS 16.4+, compatible iPad 8 sous iPadOS 16/17/18) complétée par un flux anti-veille silencieux.
-            <br><em>Astuce iPadOS :</em> si vous souhaitez laisser l'horloge 24h/24, vous pouvez aussi régler <strong>Réglages → Luminosité et affichage → Verrouillage automatique → Jamais</strong>.
+            <strong>2. Avoir la météo :</strong>
+            • Sur <strong>tous les styles d'horloge</strong> : la météo actuelle s'affiche en haut à côté de la date.<br>
+            • Pour un affichage complet avec prévisions sur 4 jours, vent, ressenti et humidité : choisissez le style <strong>« ⛅ Station Météo »</strong> dans le menu.
           </li>
           <li>
             <strong>3. Consommation minimale sur iPad 8 (écran LCD) :</strong>
-            Baissez la luminosité matérielle de l'iPad dans le Centre de contrôle (coin supérieur droit), et activez le <strong>Mode Ultra-Éco (1/min)</strong> dans cette application : le processeur restera en sommeil 99,9 % du temps !
+            Baissez la luminosité matérielle de l'iPad dans le Centre de contrôle, et activez le <strong>Mode Ultra-Éco (1/min)</strong> : l'horloge ne se redessine qu'une fois par minute et la météo ne s'actualise que toutes les 30 minutes.
           </li>
         </ol>
       </div>
@@ -288,4 +368,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-
