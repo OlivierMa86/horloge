@@ -687,6 +687,7 @@
 
       renderWeatherData(data);
     } catch (err) {
+      // En cas d'échec, afficher l'erreur précise pour diagnostic ou le dernier cache
       const cachedRaw = localStorage.getItem(WEATHER_CACHE_KEY);
       if (cachedRaw) {
         try {
@@ -694,7 +695,7 @@
         } catch (e) {}
       } else {
         dom.wmDesc.textContent = 'Hors-ligne';
-        dom.stDesc.textContent = 'Météo hors-ligne';
+        dom.stDesc.textContent = `Météo indisponible (${err && err.message ? err.message : 'réseau'})`;
       }
     }
   }
