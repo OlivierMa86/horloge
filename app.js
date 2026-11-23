@@ -630,10 +630,33 @@
     }, intervalMs);
   }
 
-  // --- Module Météo Basse Consommation (Open-Meteo API gratuite sans clé) ---
+  // --- Module Météo Basse Consommation (Supporte weather_data.js local Jeedom + Open-Meteo direct) ---
+  function loadLocalWeatherScript() {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = `./weather_data.js?t=${Date.now()}`;
+      script.onload = () => {
+        resolve(window.JEEDOM_LOCAL_WEATHER || null);
+        script.remove();
+      };
+      script.onerror = () => {
+        resolve(window.JEEDOM_LOCAL_WEATHER || null);
+        script.remove();
+      };
+      document.head.appendChild(script);
+    });
+  }
+
   async function fetchWeather(force = false) {
     if (isAlarmStandby && !force) return;
     try {
+      // 1. Essayer en priorité le fichier JavaScript local weather_data.js (jamais bloqué par le .htaccess d'Apache Jeedom !)
+      const jsWeatherData = await loadLocalWeatherScript();
+      if (jsWeatherData && jsWeatherData.current) {
+        renderWeatherData(jsWeatherData);
+        return;
+      }
+
       if (!force) {
         const cachedRaw = localStorage.getItem(WEATHER_CACHE_KEY);
         if (cachedRaw) {
@@ -649,43 +672,10 @@
         }
       }
 
-      // 1. Essayer d'abord le fichier JSON local généré par Jeedom (weather_data.json)
-      // 2. Sinon le proxy PHP (weather_proxy.php)
-      // 3. Sinon l'appel direct Open-Meteo (pour GitHub Pages)
-      const localJsonUrl = `./weather_data.json?t=${Date.now()}`;
-      const proxyUrl = `./weather_proxy.php?action=forecast&lat=${encodeURIComponent(state.lat)}&lon=${encodeURIComponent(state.lon)}`;
       const directUrl = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5`;
-
-      let data = null;
-      if (window.location.hostname !== 'olivierma86.github.io') {
-        try {
-          const localRes = await fetch(localJsonUrl, { cache: 'no-store' });
-          if (localRes.ok) {
-            const localJson = await localRes.json();
-            if (localJson && localJson.current) {
-              data = localJson;
-            }
-          }
-        } catch (e) {}
-
-        if (!data) {
-          try {
-            const proxyRes = await fetch(proxyUrl, { cache: 'no-store' });
-            if (proxyRes.ok) {
-              const proxyJson = await proxyRes.json();
-              if (proxyJson && proxyJson.current) {
-                data = proxyJson;
-              }
-            }
-          } catch (e) {}
-        }
-      }
-
-      if (!data) {
-        const response = await fetch(directUrl);
-        if (!response.ok) throw new Error('Erreur réseau météo');
-        data = await response.json();
-      }
+      const response = await fetch(directUrl);
+      if (!response.ok) throw new Error('Erreur réseau météo');
+      const data = await response.json();
 
       localStorage.setItem(
         WEATHER_CACHE_KEY,
@@ -699,7 +689,10 @@
 
       renderWeatherData(data);
     } catch (err) {
-      // En cas d'échec, afficher l'erreur précise pour diagnostic ou le dernier cache
+      if (window.JEEDOM_LOCAL_WEATHER && window.JEEDOM_LOCAL_WEATHER.current) {
+        renderWeatherData(window.JEEDOM_LOCAL_WEATHER);
+        return;
+      }
       const cachedRaw = localStorage.getItem(WEATHER_CACHE_KEY);
       if (cachedRaw) {
         try {
