@@ -550,6 +550,19 @@
         throw new Error(`HTTP ${response.status}`);
       }
       const rawText = (await response.text()).trim().replace(/^"|"$/g, '');
+
+      // Vérifier si Jeedom a renvoyé un message d'erreur d'autorisation au lieu d'une valeur de commande
+      if (
+        rawText.toLowerCase().includes('pas autoris') ||
+        rawText.toLowerCase().includes('unauthorized') ||
+        rawText.toLowerCase().includes('aucune méthode')
+      ) {
+        dom.jeedomStatusMsg.textContent = `⚠️ Refus Jeedom : « ${rawText} » — Utilisez la Clé API Globale Jeedom.`;
+        dom.jeedomBadge.textContent = '🏠 API Refusée';
+        dom.jeedomBadge.classList.remove('hidden');
+        return;
+      }
+
       const activeTarget = String(state.jeedomActiveVal || '1').trim();
       const alarmIsActive = rawText === activeTarget;
 
@@ -636,10 +649,31 @@
         }
       }
 
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5`;
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Erreur réseau météo');
-      const data = await response.json();
+      // Essayer d'abord le proxy PHP local (contourne le blocage CSP Apache sur Jeedom 192.168.1.23)
+      // puis basculer sur l'appel direct Open-Meteo (pour GitHub Pages)
+      const proxyUrl = `./weather_proxy.php?action=forecast&lat=${encodeURIComponent(state.lat)}&lon=${encodeURIComponent(state.lon)}`;
+      const directUrl = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5`;
+
+      let data = null;
+      if (window.location.hostname !== 'olivierma86.github.io') {
+        try {
+          const proxyRes = await fetch(proxyUrl, { cache: 'no-store' });
+          if (proxyRes.ok) {
+            const proxyJson = await proxyRes.json();
+            if (proxyJson && proxyJson.current) {
+              data = proxyJson;
+            }
+          }
+        } catch (e) {
+          // Si PHP n'est pas actif (ex: test fichier local), on tentera directUrl
+        }
+      }
+
+      if (!data) {
+        const response = await fetch(directUrl);
+        if (!response.ok) throw new Error('Erreur réseau météo');
+        data = await response.json();
+      }
 
       localStorage.setItem(
         WEATHER_CACHE_KEY,
@@ -728,9 +762,26 @@
     if (!trimmed) return;
     dom.weatherStatusMsg.textContent = `Recherche de « ${trimmed} »…`;
     try {
-      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(trimmed)}&count=1&language=fr&format=json`;
-      const res = await fetch(url);
-      const json = await res.json();
+      const proxySearchUrl = `./weather_proxy.php?action=search&name=${encodeURIComponent(trimmed)}`;
+      const directSearchUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(trimmed)}&count=1&language=fr&format=json`;
+
+      let json = null;
+      if (window.location.hostname !== 'olivierma86.github.io') {
+        try {
+          const proxyRes = await fetch(proxySearchUrl, { cache: 'no-store' });
+          if (proxyRes.ok) {
+            const candidate = await proxyRes.json();
+            if (candidate && candidate.results) {
+              json = candidate;
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (!json) {
+        const res = await fetch(directSearchUrl);
+        json = await res.json();
+      }
       if (!json.results || json.results.length === 0) {
         dom.weatherStatusMsg.textContent = `Aucune ville trouvée pour « ${trimmed} ».`;
         return;
