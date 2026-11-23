@@ -27,9 +27,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Ne jamais mettre en cache les appels API Météo, Proxy PHP Météo ou API Jeedom
+  // Ne jamais mettre en cache les appels API Météo, JSON météo local, Proxy PHP Météo ou API Jeedom
   if (
     url.hostname.includes('open-meteo.com') ||
+    url.pathname.includes('weather_data.json') ||
     url.pathname.includes('weather_proxy.php') ||
     url.pathname.includes('jeeApi.php')
   ) {

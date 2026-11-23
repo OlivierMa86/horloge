@@ -649,23 +649,35 @@
         }
       }
 
-      // Essayer d'abord le proxy PHP local (contourne le blocage CSP Apache sur Jeedom 192.168.1.23)
-      // puis basculer sur l'appel direct Open-Meteo (pour GitHub Pages)
+      // 1. Essayer d'abord le fichier JSON local généré par Jeedom (weather_data.json)
+      // 2. Sinon le proxy PHP (weather_proxy.php)
+      // 3. Sinon l'appel direct Open-Meteo (pour GitHub Pages)
+      const localJsonUrl = `./weather_data.json?t=${Date.now()}`;
       const proxyUrl = `./weather_proxy.php?action=forecast&lat=${encodeURIComponent(state.lat)}&lon=${encodeURIComponent(state.lon)}`;
       const directUrl = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5`;
 
       let data = null;
       if (window.location.hostname !== 'olivierma86.github.io') {
         try {
-          const proxyRes = await fetch(proxyUrl, { cache: 'no-store' });
-          if (proxyRes.ok) {
-            const proxyJson = await proxyRes.json();
-            if (proxyJson && proxyJson.current) {
-              data = proxyJson;
+          const localRes = await fetch(localJsonUrl, { cache: 'no-store' });
+          if (localRes.ok) {
+            const localJson = await localRes.json();
+            if (localJson && localJson.current) {
+              data = localJson;
             }
           }
-        } catch (e) {
-          // Si PHP n'est pas actif (ex: test fichier local), on tentera directUrl
+        } catch (e) {}
+
+        if (!data) {
+          try {
+            const proxyRes = await fetch(proxyUrl, { cache: 'no-store' });
+            if (proxyRes.ok) {
+              const proxyJson = await proxyRes.json();
+              if (proxyJson && proxyJson.current) {
+                data = proxyJson;
+              }
+            }
+          } catch (e) {}
         }
       }
 
