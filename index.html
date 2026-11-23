@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Horloge iPad — Basse Consommation & Météo</title>
-  <meta name="description" content="Horloge permanente ultra basse consommation avec météo pour iPad">
+  <title>Horloge iPad — Basse Consommation, Météo & Jeedom</title>
+  <meta name="description" content="Horloge permanente ultra basse consommation avec météo et pilotage Jeedom pour iPad">
   
   <!-- PWA & iPad Fullscreen Meta Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,6 +21,14 @@
 
   <!-- Couche d'assombrissement logiciel pour économie / confort nocturne -->
   <div id="dimmer-overlay"></div>
+
+  <!-- Écran Noir Zéro-Conso déclenché quand l'Alarme Jeedom est activée -->
+  <div id="alarm-standby-screen" class="alarm-standby-screen hidden" aria-live="polite">
+    <div id="standby-indicator" class="standby-indicator">
+      <span class="standby-dot"></span>
+      <span id="standby-text">Alarme activée — Veille</span>
+    </div>
+  </div>
 
   <!-- Conteneur principal avec Pixel-Shift anti burn-in -->
   <main id="clock-stage" aria-live="off">
@@ -39,6 +47,7 @@
       </div>
 
       <div id="status-badges" class="badges">
+        <span id="jeedom-badge" class="badge hidden" title="Pilotage Alarme Jeedom actif">🏠 Jeedom OK</span>
         <span id="eco-badge" class="badge hidden" title="Mode Éco 1/min actif">ÉCO 1/min</span>
         <span id="wakelock-badge" class="badge" title="Maintien d'écran allumé">⚡ Veille bloquée</span>
         <span id="battery-badge" class="badge hidden">🔋 --%</span>
@@ -147,7 +156,6 @@
     <!-- 7. HORLOGE STATION MÉTÉO COMPLÈTE -->
     <section id="clock-weather" class="clock-face">
       <div class="station-layout">
-        <!-- Partie haute : Heure grand format + Météo en direct -->
         <div class="station-top">
           <div class="station-clock-block">
             <div class="station-time-row">
@@ -192,27 +200,24 @@
           </div>
         </div>
 
-        <!-- Partie basse : Prévisions sur 4 jours -->
-        <div id="st-forecast-grid" class="station-forecast-grid">
-          <!-- Généré dynamiquement par app.js -->
-        </div>
+        <div id="st-forecast-grid" class="station-forecast-grid"></div>
       </div>
     </section>
 
   </main>
 
   <!-- Indice discret au démarrage -->
-  <div id="tap-hint" class="tap-hint">Touchez l'écran pour changer d'horloge ou régler la météo</div>
+  <div id="tap-hint" class="tap-hint">Touchez l'écran pour changer d'horloge, régler la météo ou Jeedom</div>
 
   <!-- Barre de contrôle escamotable -->
   <aside id="controls-panel" class="controls-panel hidden" aria-label="Paramètres de l'horloge">
     <div class="controls-card">
       
       <div class="controls-header">
-        <h2>Configuration de l'Horloge & Météo</h2>
+        <h2>Configuration Horloge, Météo & Jeedom</h2>
         <div class="header-actions">
           <button id="btn-fullscreen" class="action-chip" type="button">⛶ Plein écran</button>
-          <button id="btn-install-help" class="action-chip" type="button">📲 Aide iPad</button>
+          <button id="btn-install-help" class="action-chip" type="button">📲 Guide iPad & Jeedom</button>
           <button id="btn-close-panel" class="close-btn" type="button" aria-label="Fermer">✕</button>
         </div>
       </div>
@@ -249,6 +254,58 @@
             <span class="style-icon">◎</span>
             <span>Anneaux</span>
           </button>
+        </div>
+      </div>
+
+      <!-- INTÉGRATION JEEDOM (PILOTAGE VEILLE PAR ALARME) -->
+      <div class="control-group jeedom-box">
+        <div class="jeedom-header-row">
+          <label class="group-label">🏠 Pilotage de mise en veille par Alarme Jeedom</label>
+          <label class="jeedom-enable-switch">
+            <input type="checkbox" id="toggle-jeedom">
+            <span>Activer la liaison Jeedom</span>
+          </label>
+        </div>
+
+        <div id="jeedom-fields" class="jeedom-fields">
+          <div class="jeedom-inputs-grid">
+            <div class="field-col">
+              <span class="field-label">URL Jeedom (IP locale ou DNS HTTPS)</span>
+              <input type="text" id="jeedom-url" class="city-input" placeholder="http://192.168.1.23" value="http://192.168.1.23" autocomplete="off">
+            </div>
+            <div class="field-col">
+              <span class="field-label">Clé API Jeedom (Core ou Virtuel)</span>
+              <input type="password" id="jeedom-apikey" class="city-input" placeholder="Collez votre clé API Jeedom" autocomplete="off">
+            </div>
+            <div class="field-col">
+              <span class="field-label">ID commande État Alarme</span>
+              <input type="text" id="jeedom-cmdid" class="city-input" placeholder="Ex: 452" inputmode="numeric" autocomplete="off">
+            </div>
+          </div>
+
+          <div class="jeedom-inputs-grid jeedom-options-row">
+            <div class="field-col">
+              <span class="field-label">Valeur quand l'alarme est ACTIVE</span>
+              <input type="text" id="jeedom-active-val" class="city-input" value="1" placeholder="1">
+            </div>
+            <div class="field-col">
+              <span class="field-label">Fréquence de vérification (sec)</span>
+              <input type="number" id="jeedom-interval" class="city-input" value="15" min="5" max="300">
+            </div>
+            <div class="field-col">
+              <span class="field-label">Action quand l'alarme est mise</span>
+              <select id="jeedom-standby-mode" class="city-input">
+                <option value="blackout_auto">Écran Noir + Réveil 100% auto au désarmement</option>
+                <option value="blackout_release">Écran Noir + Relâcher la veille matérielle iPad</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="jeedom-actions-row">
+            <button type="button" id="btn-test-jeedom" class="action-chip primary-chip">🔄 Enregistrer & Tester Jeedom</button>
+            <button type="button" id="btn-sim-alarm" class="action-chip">🌙 Tester la mise en veille (5s)</button>
+            <span id="jeedom-status-msg" class="weather-status-msg">Non connecté — renseignez votre clé API et l'ID de commande</span>
+          </div>
         </div>
       </div>
 
@@ -338,27 +395,27 @@
     </div>
   </aside>
 
-  <!-- Modale d'aide pour installer sur l'iPad 8+ et bloquer la veille -->
+  <!-- Modale d'aide pour installer sur l'iPad 8+ et connecter à Jeedom 192.168.1.23 -->
   <div id="install-modal" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="modal-header">
-        <h3>Configurer sur votre iPad (iPad 8 et +)</h3>
+        <h3>Guide : Liaison Jeedom (192.168.1.23) & Jeedom Connect</h3>
         <button id="btn-close-modal" class="close-btn" type="button">✕</button>
       </div>
       <div class="modal-body">
         <ol class="guide-steps">
           <li>
-            <strong>1. Installer en plein écran (sans barres Safari) :</strong>
-            Dans Safari sur l'iPad, touchez le bouton <strong>Partager</strong> (carré avec une flèche vers le haut) puis choisissez <strong>« Sur l'écran d'accueil »</strong>. Lancez ensuite l'application depuis sa nouvelle icône.
+            <strong>1. Comment fonctionne la mise en veille par l'Alarme Jeedom ?</strong>
+            L'horloge interroge votre commande d'état d'alarme Jeedom (`http://192.168.1.23/core/api/jeeApi.php?apikey=...&type=cmd&id=...`).<br>
+            • <strong>Alarme activée (1) :</strong> L'horloge s'éteint (écran 100 % noir `#000000`) et stoppe ses calculs.<br>
+            • <strong>Alarme désactivée (0) :</strong> L'horloge se rallume automatiquement dès qu'elle détecte `0` !
           </li>
           <li>
-            <strong>2. Avoir la météo :</strong>
-            • Sur <strong>tous les styles d'horloge</strong> : la météo actuelle s'affiche en haut à côté de la date.<br>
-            • Pour un affichage complet avec prévisions sur 4 jours, vent, ressenti et humidité : choisissez le style <strong>« ⛅ Station Météo »</strong> dans le menu.
-          </li>
-          <li>
-            <strong>3. Consommation minimale sur iPad 8 (écran LCD) :</strong>
-            Baissez la luminosité matérielle de l'iPad dans le Centre de contrôle, et activez le <strong>Mode Ultra-Éco (1/min)</strong> : l'horloge ne se redessine qu'une fois par minute et la météo ne s'actualise que toutes les 30 minutes.
+            <strong>2. Important : HTTP local (`192.168.1.23`) vs HTTPS GitHub Pages</strong>
+            Par sécurité, Safari sur iPad bloque les requêtes vers une IP locale `http://192.168.1.23` si la page est ouverte depuis `https://olivierma86.github.io`. Vous avez **3 solutions simples** :
+            <br>• <strong>Option A (Dans Jeedom Connect) :</strong> Ajoutez une <em>WebView</em> dans Jeedom Connect ou ouvrez l'horloge via votre URL HTTPS Jeedom (DNS Jeedom `https://xxx.dns.jeedom.com`).
+            <br>• <strong>Option B (Héberger l'horloge directement sur votre Jeedom `192.168.1.23`) :</strong> Copiez ce dossier `horloge` dans `/var/www/html/horloge` sur votre Jeedom (en 1 commande SSH : `cd /var/www/html && git clone https://github.com/OlivierMa86/horloge.git`). Puis sur l'iPad, ouvrez **`http://192.168.1.23/horloge/`** ! Plus aucun blocage HTTPS/CORS, même si Internet est coupé !
+            <br>• <strong>Option C (Piloter par URL depuis un scénario Jeedom) :</strong> Vous pouvez aussi forcer la mise en veille ou le réveil par paramètre d'URL : `?standby=1` (veille) ou `?standby=0` (réveil).
           </li>
         </ol>
       </div>

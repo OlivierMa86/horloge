@@ -1,46 +1,61 @@
 /**
- * HORLOGE IPAD BASSE CONSOMMATION + STATION MÉTÉO (iPad 8 & modèles suivants)
+ * HORLOGE IPAD BASSE CONSOMMATION + STATION MÉTÉO + PILOTAGE ALARME JEEDOM
  * - Rafraîchissement adaptatif : 1 Hz normal, ou 1/60 Hz (1 fois par minute) en mode Ultra-Éco
- * - Météo Open-Meteo (sans clé API) actualisée toutes les 30 minutes :
- *   1) Pilule météo en haut sur TOUS les styles d'horloge
- *   2) Mode dédié "Station Météo" avec prévisions 4 jours, ressenti, vent et humidité
- * - Anti-veille : Screen Wake Lock API + fallback audio inaudible
- * - Anti-brûlure d'écran (Pixel Shifting) toutes les minutes
+ * - Liaison directe API Jeedom (192.168.1.23 par défaut) :
+ *   Interroge l'état de la commande Alarme Jeedom :
+ *   -> Alarme activée : passe la tablette en veille (écran noir zéro-conso + option relâchement WakeLock)
+ *   -> Alarme désactivée : rallume automatiquement l'horloge !
+ * - Supporte aussi le pilotage direct par URL depuis Jeedom Connect (?standby=1 ou ?standby=0)
  */
 
 (function () {
   'use strict';
 
-  const STORAGE_KEY = 'horloge_ipad_prefs_v2';
+  const STORAGE_KEY = 'horloge_ipad_prefs_v3';
   const WEATHER_CACHE_KEY = 'horloge_ipad_weather_cache_v1';
-  const WEATHER_REFRESH_MS = 30 * 60 * 1000; // 30 minutes pour économiser la batterie
+  const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 
   const defaultState = {
     style: 'digital',      // digital | weather | flip | analog | words | segment | rings
     theme: 'theme-white',  // theme-white | theme-red | theme-amber | theme-green | theme-cyan | theme-sepia
-    brightness: 85,        // 5 à 100 (%)
-    scale: 100,            // 60 à 125 (%)
-    ecoMode: false,        // true = rafraîchissement 1 fois/minute + secondes masquées
-    autoNight: true,       // true = 22h-07h bascule auto en rouge 15%
+    brightness: 85,
+    scale: 100,
+    ecoMode: false,
+    autoNight: true,
     showDate: true,
-    showWeatherBar: true,  // Affiche le résumé météo en haut sur toutes les horloges
+    showWeatherBar: true,
     use24h: true,
     city: 'Poitiers',
     lat: 46.5802,
-    lon: 0.3404
+    lon: 0.3404,
+    // Configuration Jeedom
+    jeedomEnabled: false,
+    jeedomUrl: 'http://192.168.1.23',
+    jeedomApiKey: '',
+    jeedomCmdId: '',
+    jeedomActiveVal: '1',
+    jeedomIntervalSec: 15,
+    jeedomStandbyMode: 'blackout_auto' // blackout_auto | blackout_release
   };
 
   let state = loadState();
   let tickTimer = null;
   let weatherTimer = null;
+  let jeedomTimer = null;
+  let isAlarmStandby = false;
   let wakeLockSentinel = null;
   let noSleepAudioCtx = null;
+  let noSleepInterval = null;
   let hidePanelTimeout = null;
+  let standbyIndicatorTimeout = null;
 
   // --- Références DOM ---
   const dom = {
     body: document.body,
     dimmer: document.getElementById('dimmer-overlay'),
+    standbyScreen: document.getElementById('alarm-standby-screen'),
+    standbyIndicator: document.getElementById('standby-indicator'),
+    standbyText: document.getElementById('standby-text'),
     stage: document.getElementById('clock-stage'),
     topInfo: document.getElementById('top-info'),
     dateDisplay: document.getElementById('date-display'),
@@ -50,6 +65,7 @@
     wmDesc: document.getElementById('wm-desc'),
     wmMinmax: document.getElementById('wm-minmax'),
     wmCity: document.getElementById('wm-city'),
+    jeedomBadge: document.getElementById('jeedom-badge'),
     ecoBadge: document.getElementById('eco-badge'),
     wakeLockBadge: document.getElementById('wakelock-badge'),
     batteryBadge: document.getElementById('battery-badge'),
@@ -73,7 +89,7 @@
     handMinute: document.getElementById('hand-minute'),
     handSecondGroup: document.getElementById('hand-second-group'),
 
-    // 4. Mots (En lettres)
+    // 4. Mots
     wordGrid: document.getElementById('word-grid'),
 
     // 5. LED / 7-Segments
@@ -89,7 +105,7 @@
     ringTimeText: document.getElementById('ring-time-text'),
     ringSecText: document.getElementById('ring-sec-text'),
 
-    // 7. Station Météo Complète
+    // 7. Station Météo
     stHours: document.getElementById('st-hours'),
     stMinutes: document.getElementById('st-minutes'),
     stSeconds: document.getElementById('st-seconds'),
@@ -126,10 +142,21 @@
     btnInstallHelp: document.getElementById('btn-install-help'),
     btnClosePanel: document.getElementById('btn-close-panel'),
     installModal: document.getElementById('install-modal'),
-    btnCloseModal: document.getElementById('btn-close-modal')
+    btnCloseModal: document.getElementById('btn-close-modal'),
+
+    // Contrôles Jeedom
+    toggleJeedom: document.getElementById('toggle-jeedom'),
+    jeedomUrl: document.getElementById('jeedom-url'),
+    jeedomApiKey: document.getElementById('jeedom-apikey'),
+    jeedomCmdId: document.getElementById('jeedom-cmdid'),
+    jeedomActiveVal: document.getElementById('jeedom-active-val'),
+    jeedomInterval: document.getElementById('jeedom-interval'),
+    jeedomStandbyMode: document.getElementById('jeedom-standby-mode'),
+    btnTestJeedom: document.getElementById('btn-test-jeedom'),
+    btnSimAlarm: document.getElementById('btn-sim-alarm'),
+    jeedomStatusMsg: document.getElementById('jeedom-status-msg')
   };
 
-  // --- Codes météo WMO -> Icône & Description en français ---
   function decodeWmoWeather(code, isNight = false) {
     const map = {
       0: { icon: isNight ? '🌙' : '☀️', label: isNight ? 'Ciel dégagé' : 'Ensoleillé' },
@@ -164,7 +191,6 @@
     return map[code] || { icon: '⛅', label: 'Variable' };
   }
 
-  // --- Matrice de l'horloge en lettres française (11 colonnes x 10 lignes) ---
   const WORD_MATRIX = [
     'ILNESTODEUX',
     'QUATRETROIS',
@@ -210,7 +236,10 @@
 
   function loadState() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('horloge_ipad_prefs_v1');
+      const raw =
+        localStorage.getItem(STORAGE_KEY) ||
+        localStorage.getItem('horloge_ipad_prefs_v2') ||
+        localStorage.getItem('horloge_ipad_prefs_v1');
       if (!raw) return { ...defaultState };
       return { ...defaultState, ...JSON.parse(raw) };
     } catch (e) {
@@ -221,8 +250,35 @@
   function saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) {
-      // Ignore storage errors
+    } catch (e) {}
+  }
+
+  // Permet aussi de pré-configurer Jeedom ou déclencher la veille par paramètres d'URL
+  // Exemple : ?standby=1 ou ?jeedomUrl=http://192.168.1.23&apikey=XXX&cmdId=452
+  function checkUrlParameters() {
+    const params = new URLSearchParams(window.location.search);
+    let updated = false;
+
+    if (params.has('jeedomUrl')) {
+      state.jeedomUrl = params.get('jeedomUrl');
+      updated = true;
+    }
+    if (params.has('apikey')) {
+      state.jeedomApiKey = params.get('apikey');
+      updated = true;
+    }
+    if (params.has('cmdId')) {
+      state.jeedomCmdId = params.get('cmdId');
+      state.jeedomEnabled = true;
+      updated = true;
+    }
+    if (updated) {
+      saveState();
+    }
+
+    if (params.has('standby')) {
+      const val = params.get('standby');
+      setAlarmStandbyState(val === '1' || val === 'true', 'Commande URL Jeedom');
     }
   }
 
@@ -280,6 +336,9 @@
   let lastMinuteRendered = -1;
 
   function updateClock() {
+    // Si l'alarme Jeedom a mis l'horloge en veille noire, ne rien dessiner (0% CPU/GPU)
+    if (isAlarmStandby) return;
+
     const now = new Date();
     const hours24 = now.getHours();
     const minutes = now.getMinutes();
@@ -357,7 +416,6 @@
     }
   }
 
-  // --- Logique de l'horloge en lettres (Français) ---
   function renderWordClock(hours24, minutes) {
     const activeCoords = [WORDS.IL, WORDS.EST];
     const fiveMinStep = Math.floor(minutes / 5) * 5;
@@ -460,10 +518,109 @@
     dom.stDate.textContent = formatted;
   }
 
+  // ==========================================================================
+  // MODULE JEEDOM — PILOTAGE DE LA VEILLE PAR L'ÉTAT DE L'ALARME (192.168.1.23)
+  // ==========================================================================
+  function buildJeedomCmdUrl() {
+    const baseUrl = (state.jeedomUrl || 'http://192.168.1.23').trim().replace(/\/+$/, '');
+    const apiKey = encodeURIComponent((state.jeedomApiKey || '').trim());
+    const cmdId = encodeURIComponent((state.jeedomCmdId || '').trim());
+    return `${baseUrl}/core/api/jeeApi.php?apikey=${apiKey}&type=cmd&id=${cmdId}`;
+  }
+
+  async function pollJeedomAlarmState(isManualTest = false) {
+    if (!state.jeedomEnabled && !isManualTest) {
+      dom.jeedomBadge.classList.add('hidden');
+      return;
+    }
+
+    const apiKey = (state.jeedomApiKey || '').trim();
+    const cmdId = (state.jeedomCmdId || '').trim();
+    if (!apiKey || !cmdId) {
+      if (isManualTest) {
+        dom.jeedomStatusMsg.textContent = '⚠️ Renseignez la clé API Jeedom et l’ID de la commande État Alarme.';
+      }
+      return;
+    }
+
+    const url = buildJeedomCmdUrl();
+    try {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const rawText = (await response.text()).trim().replace(/^"|"$/g, '');
+      const activeTarget = String(state.jeedomActiveVal || '1').trim();
+      const alarmIsActive = rawText === activeTarget;
+
+      const timeStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      dom.jeedomStatusMsg.textContent = `✅ Connecté à Jeedom (${timeStr}) — Valeur reçue : « ${rawText} » (${alarmIsActive ? 'ALARME ACTIVE → Veille' : 'Alarme désactivée → Horloge allumée'})`;
+      dom.jeedomBadge.textContent = alarmIsActive ? '🏠 Alarme ON' : '🏠 Jeedom OK';
+      dom.jeedomBadge.classList.remove('hidden');
+
+      setAlarmStandbyState(alarmIsActive, 'Alarme Jeedom');
+    } catch (err) {
+      const isMixedContent =
+        window.location.protocol === 'https:' &&
+        (state.jeedomUrl || '').trim().toLowerCase().startsWith('http://');
+
+      if (isMixedContent) {
+        dom.jeedomStatusMsg.textContent =
+          '⚠️ Safari bloque l’appel HTTP local (192.168.1.23) depuis une page HTTPS. Touchez « 📲 Guide iPad & Jeedom » en haut pour la solution en 1 clic.';
+      } else {
+        dom.jeedomStatusMsg.textContent = `⚠️ Impossible de joindre Jeedom (${err.message}). Vérifiez l'IP, la clé API et l'ID.`;
+      }
+      dom.jeedomBadge.textContent = '🏠 Jeedom Err';
+      dom.jeedomBadge.classList.remove('hidden');
+    }
+  }
+
+  function setAlarmStandbyState(shouldStandby, reason = 'Alarme Jeedom') {
+    if (shouldStandby === isAlarmStandby) return;
+    isAlarmStandby = shouldStandby;
+
+    if (isAlarmStandby) {
+      // Activer l'écran noir intégral Zéro-Conso
+      dom.standbyText.textContent = `${reason} activée — Mode Veille`;
+      dom.standbyScreen.classList.remove('hidden');
+      dom.standbyIndicator.classList.remove('dimmed');
+
+      // Masquer totalement le petit témoin rouge après 4 secondes pour un écran 100% noir (#000000)
+      if (standbyIndicatorTimeout) clearTimeout(standbyIndicatorTimeout);
+      standbyIndicatorTimeout = setTimeout(() => {
+        dom.standbyIndicator.classList.add('dimmed');
+      }, 4000);
+
+      // Si l'utilisateur a choisi de relâcher aussi le WakeLock matériel iPadOS
+      if (state.jeedomStandbyMode === 'blackout_release') {
+        releaseWakeLock();
+      }
+    } else {
+      // Désactivation de l'alarme -> Rallumer immédiatement l'horloge !
+      dom.standbyScreen.classList.add('hidden');
+      lastMinuteRendered = -1;
+      requestWakeLock();
+      scheduleNextTick();
+    }
+  }
+
+  function startJeedomSchedule() {
+    if (jeedomTimer) clearInterval(jeedomTimer);
+    if (!state.jeedomEnabled) {
+      dom.jeedomBadge.classList.add('hidden');
+      return;
+    }
+    pollJeedomAlarmState(false);
+    const intervalMs = Math.max(5, Number(state.jeedomIntervalSec) || 15) * 1000;
+    jeedomTimer = setInterval(() => {
+      pollJeedomAlarmState(false);
+    }, intervalMs);
+  }
+
   // --- Module Météo Basse Consommation (Open-Meteo API gratuite sans clé) ---
   async function fetchWeather(force = false) {
+    if (isAlarmStandby && !force) return;
     try {
-      // Vérifier le cache local si non forcé
       if (!force) {
         const cachedRaw = localStorage.getItem(WEATHER_CACHE_KEY);
         if (cachedRaw) {
@@ -496,7 +653,6 @@
 
       renderWeatherData(data);
     } catch (err) {
-      // En cas de coupure Wi-Fi, afficher le dernier cache s'il existe
       const cachedRaw = localStorage.getItem(WEATHER_CACHE_KEY);
       if (cachedRaw) {
         try {
@@ -525,14 +681,12 @@
     const todayMin = daily.temperature_2m_min ? Math.round(daily.temperature_2m_min[0]) : '--';
     const todayMax = daily.temperature_2m_max ? Math.round(daily.temperature_2m_max[0]) : '--';
 
-    // 1. Mise à jour de la pilule météo en haut (sur toutes les horloges)
     dom.wmIcon.textContent = wmo.icon;
     dom.wmTemp.textContent = `${temp}°C`;
     dom.wmDesc.textContent = wmo.label;
     dom.wmMinmax.textContent = `(${todayMin}° / ${todayMax}°)`;
     dom.wmCity.textContent = state.city;
 
-    // 2. Mise à jour du mode "Station Météo"
     dom.stCity.textContent = state.city;
     const nowTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     dom.stUpdated.textContent = `Actualisé à ${nowTime}`;
@@ -544,7 +698,6 @@
     dom.stHumidity.textContent = `${humidity}%`;
     dom.stWind.textContent = `${wind} km/h`;
 
-    // 3. Prévisions des 4 prochains jours
     if (daily.time && daily.time.length > 1) {
       const fragment = document.createDocumentFragment();
       const dayFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric' });
@@ -570,7 +723,6 @@
     }
   }
 
-  // Recherche de ville par nom via l'API de géocodage Open-Meteo
   async function searchCityByName(query) {
     const trimmed = (query || '').trim();
     if (!trimmed) return;
@@ -665,13 +817,10 @@
 
     document.documentElement.style.setProperty('--clock-scale', (state.scale / 100).toFixed(2));
 
-    // Visibilité de l'en-tête Date & Météo
     dom.topInfo.classList.toggle('hidden', !state.showDate);
-    // Sur le mode "Station Météo", la météo est déjà affichée en grand au centre
     const hideMiniWeather = !state.showWeatherBar || state.style === 'weather';
     dom.weatherMini.classList.toggle('hidden', hideMiniWeather);
 
-    // Visibilité des secondes selon le mode Éco
     dom.ecoBadge.classList.toggle('hidden', !state.ecoMode);
     dom.digSeconds.classList.toggle('hidden', state.ecoMode);
     dom.stSeconds.classList.toggle('hidden', state.ecoMode);
@@ -682,18 +831,17 @@
     dom.ringSecTrack.classList.toggle('hidden', state.ecoMode);
     dom.ringSecText.classList.toggle('hidden', state.ecoMode);
 
-    // Cadran actif
     document.querySelectorAll('.clock-face').forEach((section) => {
       section.classList.toggle('active', section.id === `clock-${state.style}`);
     });
 
-    // Synchroniser les contrôles UI
     document.querySelectorAll('.style-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.style === state.style);
     });
     document.querySelectorAll('.color-dot').forEach((dot) => {
       dot.classList.toggle('active', dot.dataset.theme === state.theme);
     });
+
     dom.cityInput.value = state.city;
     dom.weatherStatusMsg.textContent = `Ville active : ${state.city}`;
     dom.brightnessSlider.value = state.brightness;
@@ -705,10 +853,22 @@
     dom.toggleAutoNight.checked = state.autoNight;
     dom.toggleDate.checked = state.showDate;
     dom.toggle24h.checked = state.use24h;
+
+    // Synchroniser les champs Jeedom
+    dom.toggleJeedom.checked = state.jeedomEnabled;
+    dom.jeedomUrl.value = state.jeedomUrl || 'http://192.168.1.23';
+    dom.jeedomApiKey.value = state.jeedomApiKey || '';
+    dom.jeedomCmdId.value = state.jeedomCmdId || '';
+    dom.jeedomActiveVal.value = state.jeedomActiveVal || '1';
+    dom.jeedomInterval.value = state.jeedomIntervalSec || 15;
+    dom.jeedomStandbyMode.value = state.jeedomStandbyMode || 'blackout_auto';
   }
 
   // --- Maintien de l'écran allumé (Screen Wake Lock API + Fallback iPadOS) ---
   async function requestWakeLock() {
+    if (isAlarmStandby && state.jeedomStandbyMode === 'blackout_release') {
+      return;
+    }
     if ('wakeLock' in navigator) {
       try {
         wakeLockSentinel = await navigator.wakeLock.request('screen');
@@ -724,14 +884,31 @@
     enableSilentAudioKeepAwake();
   }
 
+  async function releaseWakeLock() {
+    try {
+      if (wakeLockSentinel) {
+        await wakeLockSentinel.release();
+        wakeLockSentinel = null;
+      }
+      if (noSleepInterval) {
+        clearInterval(noSleepInterval);
+        noSleepInterval = null;
+      }
+      updateWakeLockBadge(false);
+    } catch (e) {}
+  }
+
   function enableSilentAudioKeepAwake() {
     try {
-      if (noSleepAudioCtx) return;
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return;
-      noSleepAudioCtx = new AudioContextClass();
-      setInterval(() => {
+      if (!noSleepAudioCtx) {
+        noSleepAudioCtx = new AudioContextClass();
+      }
+      if (noSleepInterval) clearInterval(noSleepInterval);
+      noSleepInterval = setInterval(() => {
         if (!noSleepAudioCtx || document.hidden) return;
+        if (isAlarmStandby && state.jeedomStandbyMode === 'blackout_release') return;
         if (noSleepAudioCtx.state === 'suspended') {
           noSleepAudioCtx.resume();
         }
@@ -746,7 +923,7 @@
   }
 
   function updateWakeLockBadge(active) {
-    dom.wakeLockBadge.textContent = active ? '⚡ Écran maintenu' : '⚡ Touchez pour maintenir';
+    dom.wakeLockBadge.textContent = active ? '⚡ Écran maintenu' : '⚡ Veille libre';
   }
 
   // --- Batterie ---
@@ -781,19 +958,37 @@
   function resetAutoCloseTimer() {
     if (hidePanelTimeout) clearTimeout(hidePanelTimeout);
     hidePanelTimeout = setTimeout(() => {
+      const activeTag = document.activeElement ? document.activeElement.tagName : '';
       if (
         dom.installModal.classList.contains('hidden') &&
-        document.activeElement !== dom.cityInput
+        activeTag !== 'INPUT' &&
+        activeTag !== 'SELECT'
       ) {
         closeControlsPanel();
       }
-    }, 12000);
+    }, 15000);
+  }
+
+  function saveJeedomInputsFromDom() {
+    state.jeedomEnabled = dom.toggleJeedom.checked;
+    state.jeedomUrl = dom.jeedomUrl.value.trim() || 'http://192.168.1.23';
+    state.jeedomApiKey = dom.jeedomApiKey.value.trim();
+    state.jeedomCmdId = dom.jeedomCmdId.value.trim();
+    state.jeedomActiveVal = dom.jeedomActiveVal.value.trim() || '1';
+    state.jeedomIntervalSec = Math.max(5, Number(dom.jeedomInterval.value) || 15);
+    state.jeedomStandbyMode = dom.jeedomStandbyMode.value;
+    saveState();
   }
 
   function bindEvents() {
     dom.stage.addEventListener('click', () => {
       requestWakeLock();
       openControlsPanel();
+    });
+
+    // Si l'écran est en veille noire Alarme et qu'on touche l'écran, on affiche l'horloge temporairement
+    dom.standbyScreen.addEventListener('click', () => {
+      setAlarmStandbyState(false, 'Réveil tactile');
     });
 
     dom.panel.addEventListener('click', (e) => {
@@ -814,6 +1009,27 @@
       saveState();
       applyEffectiveAppearance();
       updateClock();
+    });
+
+    // Événements Jeedom
+    dom.toggleJeedom.addEventListener('change', () => {
+      saveJeedomInputsFromDom();
+      startJeedomSchedule();
+    });
+
+    dom.btnTestJeedom.addEventListener('click', () => {
+      saveJeedomInputsFromDom();
+      pollJeedomAlarmState(true);
+      startJeedomSchedule();
+    });
+
+    // Bouton de simulation de mise en veille Alarme pendant 5 secondes
+    dom.btnSimAlarm.addEventListener('click', () => {
+      closeControlsPanel();
+      setAlarmStandbyState(true, 'Test Alarme (5s)');
+      setTimeout(() => {
+        setAlarmStandbyState(false, 'Fin du test');
+      }, 5000);
     });
 
     // Recherche de ville météo
@@ -842,28 +1058,24 @@
       applyEffectiveAppearance();
     });
 
-    // Luminosité logicielle
     dom.brightnessSlider.addEventListener('input', (e) => {
       state.brightness = Number(e.target.value);
       saveState();
       applyEffectiveAppearance();
     });
 
-    // Taille de l'horloge
     dom.scaleSlider.addEventListener('input', (e) => {
       state.scale = Number(e.target.value);
       saveState();
       applyEffectiveAppearance();
     });
 
-    // Afficher la météo sur toutes les horloges
     dom.toggleWeather.addEventListener('change', (e) => {
       state.showWeatherBar = e.target.checked;
       saveState();
       applyEffectiveAppearance();
     });
 
-    // Mode Ultra-Éco (1/min)
     dom.toggleEco.addEventListener('change', (e) => {
       state.ecoMode = e.target.checked;
       saveState();
@@ -871,28 +1083,24 @@
       scheduleNextTick();
     });
 
-    // Mode Nuit Automatique
     dom.toggleAutoNight.addEventListener('change', (e) => {
       state.autoNight = e.target.checked;
       saveState();
       applyEffectiveAppearance();
     });
 
-    // Afficher la barre supérieure
     dom.toggleDate.addEventListener('change', (e) => {
       state.showDate = e.target.checked;
       saveState();
       applyEffectiveAppearance();
     });
 
-    // Format 24h / 12h
     dom.toggle24h.addEventListener('change', (e) => {
       state.use24h = e.target.checked;
       saveState();
       updateClock();
     });
 
-    // Bouton Plein écran
     dom.btnFullscreen.addEventListener('click', () => {
       const docEl = document.documentElement;
       const requestFs = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
@@ -909,7 +1117,6 @@
       }
     });
 
-    // Modale d'aide iPad
     dom.btnInstallHelp.addEventListener('click', () => {
       dom.installModal.classList.remove('hidden');
     });
@@ -929,6 +1136,9 @@
         requestWakeLock();
         scheduleNextTick();
         fetchWeather(false);
+        if (state.jeedomEnabled) {
+          pollJeedomAlarmState(false);
+        }
       }
     });
   }
@@ -943,10 +1153,12 @@
     initAnalogClock();
     initWordClock();
     initRingsClock();
+    checkUrlParameters();
     applyEffectiveAppearance();
     bindEvents();
     scheduleNextTick();
     startWeatherSchedule();
+    startJeedomSchedule();
     requestWakeLock();
     initBatteryMonitor();
     registerServiceWorker();

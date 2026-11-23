@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HORLOGE IPAD BASSE CONSOMMATION + STATION MÉTÉO — FEUILLE DE STYLE
+   HORLOGE IPAD BASSE CONSOMMATION + STATION MÉTÉO + JEEDOM — FEUILLE DE STYLE
    Fond noir pur #000000 (OLED & LCD Dark Backlight friendly)
    Animations GPU réduites au strict minimum pour économiser la batterie
    ========================================================================== */
@@ -67,7 +67,9 @@ body.theme-sepia {
   -webkit-user-select: none;
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="password"],
+input[type="number"] {
   user-select: text;
   -webkit-user-select: text;
 }
@@ -90,6 +92,39 @@ html, body {
   opacity: 0.15;
   pointer-events: none;
   z-index: 50;
+}
+
+/* Écran Noir Zéro-Conso (Alarme Jeedom activée) */
+.alarm-standby-screen {
+  position: fixed;
+  inset: 0;
+  background-color: #000000;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.standby-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 42, 42, 0.25);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  transition: opacity 2s ease;
+}
+
+.standby-indicator.dimmed {
+  opacity: 0;
+}
+
+.standby-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: rgba(255, 42, 42, 0.45);
 }
 
 /* Scène principale avec Pixel Shift */
@@ -781,7 +816,7 @@ body.theme-red .ring-s {
 }
 
 .controls-card {
-  width: min(800px, 96vw);
+  width: min(820px, 96vw);
   max-height: 90vh;
   overflow-y: auto;
   background: #141417;
@@ -861,6 +896,70 @@ body.theme-red .ring-s {
   font-weight: 600;
 }
 
+/* Bloc de configuration Jeedom */
+.jeedom-box {
+  background: #1a1a20;
+  border: 1px solid rgba(48, 209, 88, 0.25);
+  border-radius: 16px;
+  padding: 14px 16px;
+  gap: 12px;
+}
+
+.jeedom-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.jeedom-enable-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #30d158;
+  cursor: pointer;
+}
+
+.jeedom-enable-switch input {
+  width: 18px;
+  height: 18px;
+  accent-color: #30d158;
+}
+
+.jeedom-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.jeedom-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.field-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-label {
+  font-size: 0.75rem;
+  color: #a1a1a6;
+}
+
+.jeedom-actions-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 2px;
+}
+
 /* Champ ville météo */
 .weather-config-row {
   display: flex;
@@ -870,13 +969,13 @@ body.theme-red .ring-s {
 
 .city-input {
   flex: 1;
-  min-width: 180px;
+  min-width: 120px;
   background: #1e1e24;
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
-  padding: 9px 14px;
-  font-size: 0.95rem;
+  padding: 9px 12px;
+  font-size: 0.9rem;
   outline: none;
 }
 
@@ -1016,7 +1115,9 @@ input[type="range"] {
 }
 
 .modal-card {
-  width: min(620px, 95vw);
+  width: min(680px, 95vw);
+  max-height: 88vh;
+  overflow-y: auto;
   background: #18181c;
   color: #f5f5f7;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -1037,12 +1138,10 @@ input[type="range"] {
   flex-direction: column;
   gap: 14px;
   line-height: 1.5;
-  font-size: 0.94rem;
+  font-size: 0.92rem;
   color: #d1d1d6;
 }
 
 .guide-steps strong {
   color: #ffffff;
-  display: block;
-  margin-bottom: 3px;
 }
