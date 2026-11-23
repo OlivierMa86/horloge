@@ -773,6 +773,88 @@ body.theme-red .ring-s {
 }
 
 /* ==========================================================================
+   BARRE INFÉRIEURE : 4 GRANDES VILLES DU MONDE (ROTATION QUOTIDIENNE)
+   ========================================================================== */
+.world-clocks-bar {
+  position: absolute;
+  bottom: max(18px, env(safe-area-inset-bottom, 18px));
+  left: 36px;
+  right: 36px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(8px, 1.4vw, 16px);
+  z-index: 10;
+}
+
+.world-clocks-bar.hidden {
+  display: none !important;
+}
+
+.world-city-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--fg-dim);
+  border-radius: 16px;
+  padding: clamp(7px, 1vw, 12px) clamp(10px, 1.3vw, 15px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wc-left {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wc-city-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: clamp(0.84rem, 1.35vw, 1.08rem);
+  font-weight: 700;
+  color: var(--fg-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wc-country-line {
+  font-size: clamp(0.68rem, 1vw, 0.82rem);
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wc-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.wc-time {
+  font-size: clamp(0.98rem, 1.65vw, 1.35rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-color);
+  line-height: 1.05;
+}
+
+.wc-diff {
+  font-size: clamp(0.65rem, 0.95vw, 0.78rem);
+  color: var(--fg-muted);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .world-clocks-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ==========================================================================
    INDICE ET PANNEAU DE CONFIGURATION ESCAMOTABLE
    ========================================================================== */
 .tap-hint {

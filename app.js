@@ -24,6 +24,8 @@
     autoNight: true,
     showDate: true,
     showWeatherBar: true,
+    showWorldClocks: true,
+    worldOffset: 0,        // Permet aussi de tirer 4 autres villes manuellement en plus de la rotation quotidienne
     use24h: true,
     city: 'Poitiers',
     lat: 46.5802,
@@ -120,6 +122,7 @@
     stHumidity: document.getElementById('st-humidity'),
     stWind: document.getElementById('st-wind'),
     stForecastGrid: document.getElementById('st-forecast-grid'),
+    worldClocksBar: document.getElementById('world-clocks-bar'),
 
     // Contrôles
     panel: document.getElementById('controls-panel'),
@@ -133,6 +136,8 @@
     brightnessVal: document.getElementById('brightness-val'),
     scaleSlider: document.getElementById('scale-slider'),
     scaleVal: document.getElementById('scale-val'),
+    toggleWorld: document.getElementById('toggle-world'),
+    btnShuffleWorld: document.getElementById('btn-shuffle-world'),
     toggleWeather: document.getElementById('toggle-weather'),
     toggleEco: document.getElementById('toggle-eco'),
     toggleAutoNight: document.getElementById('toggle-autonight'),
@@ -332,6 +337,140 @@
     circleEl.style.strokeDashoffset = offset;
   }
 
+  // --- 4 Grandes Villes du Monde réparties sur 4 régions autour du globe (changent chaque jour) ---
+  const WORLD_REGIONS = [
+    // 1. Amériques (Nord, Centre, Sud)
+    [
+      { city: 'New York', country: 'États-Unis', flag: '🇺🇸', tz: 'America/New_York' },
+      { city: 'Rio de Janeiro', country: 'Brésil', flag: '🇧🇷', tz: 'America/Sao_Paulo' },
+      { city: 'Vancouver', country: 'Canada', flag: '🇨🇦', tz: 'America/Vancouver' },
+      { city: 'Mexico', country: 'Mexique', flag: '🇲🇽', tz: 'America/Mexico_City' },
+      { city: 'Buenos Aires', country: 'Argentine', flag: '🇦🇷', tz: 'America/Argentina/Buenos_Aires' },
+      { city: 'Lima', country: 'Pérou', flag: '🇵🇪', tz: 'America/Lima' },
+      { city: 'Anchorage', country: 'Alaska (USA)', flag: '🇺🇸', tz: 'America/Anchorage' },
+      { city: 'Montréal', country: 'Canada (Québec)', flag: '🇨🇦', tz: 'America/Toronto' },
+      { city: 'Santiago', country: 'Chili', flag: '🇨🇱', tz: 'America/Santiago' },
+      { city: 'La Havane', country: 'Cuba', flag: '🇨🇺', tz: 'America/Havana' }
+    ],
+    // 2. Afrique, Atlantique & Moyen-Orient
+    [
+      { city: 'Le Caire', country: 'Égypte', flag: '🇪🇬', tz: 'Africa/Cairo' },
+      { city: 'Reykjavik', country: 'Islande', flag: '🇮🇸', tz: 'Atlantic/Reykjavik' },
+      { city: 'Nairobi', country: 'Kenya', flag: '🇰🇪', tz: 'Africa/Nairobi' },
+      { city: 'Le Cap', country: 'Afrique du Sud', flag: '🇿🇦', tz: 'Africa/Johannesburg' },
+      { city: 'Dakar', country: 'Sénégal', flag: '🇸🇳', tz: 'Africa/Dakar' },
+      { city: 'Antananarivo', country: 'Madagascar', flag: '🇲🇬', tz: 'Indian/Antananarivo' },
+      { city: 'Dubaï', country: 'Émirats Arabes Unis', flag: '🇦🇪', tz: 'Asia/Dubai' },
+      { city: 'Casablanca', country: 'Maroc', flag: '🇲🇦', tz: 'Africa/Casablanca' },
+      { city: 'Saint-Denis', country: 'Île de La Réunion', flag: '🇷🇪', tz: 'Indian/Reunion' },
+      { city: 'Istanbul', country: 'Turquie', flag: '🇹🇷', tz: 'Europe/Istanbul' }
+    ],
+    // 3. Asie
+    [
+      { city: 'Tokyo', country: 'Japon', flag: '🇯🇵', tz: 'Asia/Tokyo' },
+      { city: 'Katmandou', country: 'Népal', flag: '🇳🇵', tz: 'Asia/Kathmandu' },
+      { city: 'Bangkok', country: 'Thaïlande', flag: '🇹🇭', tz: 'Asia/Bangkok' },
+      { city: 'Séoul', country: 'Corée du Sud', flag: '🇰🇷', tz: 'Asia/Seoul' },
+      { city: 'New Delhi', country: 'Inde', flag: '🇮🇳', tz: 'Asia/Kolkata' },
+      { city: 'Oulan-Bator', country: 'Mongolie', flag: '🇲🇳', tz: 'Asia/Ulaanbaatar' },
+      { city: 'Singapour', country: 'Singapour', flag: '🇸🇬', tz: 'Asia/Singapore' },
+      { city: 'Pékin', country: 'Chine', flag: '🇨🇳', tz: 'Asia/Shanghai' },
+      { city: 'Hanoï', country: 'Vietnam', flag: '🇻🇳', tz: 'Asia/Bangkok' },
+      { city: 'Samarcande', country: 'Ouzbékistan', flag: '🇺🇿', tz: 'Asia/Samarkand' }
+    ],
+    // 4. Océanie & Pacifique
+    [
+      { city: 'Sydney', country: 'Australie', flag: '🇦🇺', tz: 'Australia/Sydney' },
+      { city: 'Papeete', country: 'Tahiti (Polynésie)', flag: '🇵🇫', tz: 'Pacific/Tahiti' },
+      { city: 'Auckland', country: 'Nouvelle-Zélande', flag: '🇳🇿', tz: 'Pacific/Auckland' },
+      { city: 'Honolulu', country: 'Hawaï (USA)', flag: '🇺🇸', tz: 'Pacific/Honolulu' },
+      { city: 'Nouméa', country: 'Nouvelle-Calédonie', flag: '🇳🇨', tz: 'Pacific/Noumea' },
+      { city: 'Perth', country: 'Australie-Occidentale', flag: '🇦🇺', tz: 'Australia/Perth' },
+      { city: 'Suva', country: 'Îles Fidji', flag: '🇫🇯', tz: 'Pacific/Fiji' },
+      { city: 'Île de Pâques', country: 'Pacifique Sud (Chili)', flag: '🇨🇱', tz: 'Pacific/Easter' },
+      { city: 'Darwin', country: 'Australie du Nord', flag: '🇦🇺', tz: 'Australia/Darwin' },
+      { city: 'Apia', country: 'Îles Samoa', flag: '🇼🇸', tz: 'Pacific/Apia' }
+    ]
+  ];
+
+  function getDayOfYearIndex(now) {
+    const start = new Date(now.getFullYear(), 0, 0);
+    const diff = now - start;
+    const oneDay = 1000 * 60 * 60 * 24;
+    return Math.floor(diff / oneDay);
+  }
+
+  function getTodayWorldCities(now) {
+    const dayIdx = getDayOfYearIndex(now) + (Number(state.worldOffset) || 0);
+    return WORLD_REGIONS.map((regionList, rIdx) => {
+      const idx = Math.abs(dayIdx + rIdx * 3) % regionList.length;
+      return regionList[idx];
+    });
+  }
+
+  function updateWorldClocks(now) {
+    if (!state.showWorldClocks || !dom.worldClocksBar) return;
+    const cities = getTodayWorldCities(now);
+    const fragment = document.createDocumentFragment();
+
+    cities.forEach((item) => {
+      let timeStr = '--:--';
+      let dayNightIcon = '☀️';
+      let diffLabel = '';
+
+      try {
+        const fmt = new Intl.DateTimeFormat('fr-FR', {
+          timeZone: item.tz,
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: !state.use24h
+        });
+        timeStr = fmt.format(now);
+
+        const hour24Fmt = new Intl.DateTimeFormat('en-US', {
+          timeZone: item.tz,
+          hour: 'numeric',
+          hour12: false
+        });
+        const remoteHour = Number(hour24Fmt.format(now)) % 24;
+        dayNightIcon = remoteHour >= 7 && remoteHour < 20 ? '☀️' : '🌙';
+
+        // Calcul du décalage horaire avec l'heure locale de l'iPad
+        const localDate = new Date(now.toLocaleString('en-US'));
+        const targetDate = new Date(now.toLocaleString('en-US', { timeZone: item.tz }));
+        const diffHours = Math.round((targetDate - localDate) / (1000 * 60 * 30)) / 2;
+        if (diffHours === 0) {
+          diffLabel = 'Même heure';
+        } else {
+          const sign = diffHours > 0 ? '+' : '';
+          const hInt = Math.trunc(diffHours);
+          const half = Math.abs(diffHours % 1) === 0.5 ? '30' : '';
+          diffLabel = `${sign}${hInt}h${half}`;
+        }
+      } catch (e) {}
+
+      const card = document.createElement('div');
+      card.className = 'world-city-card';
+      card.innerHTML = `
+        <div class="wc-left">
+          <div class="wc-city-line">
+            <span>${item.flag}</span>
+            <span>${item.city}</span>
+          </div>
+          <div class="wc-country-line">${item.country}</div>
+        </div>
+        <div class="wc-right">
+          <div class="wc-time">${timeStr}</div>
+          <div class="wc-diff">${dayNightIcon} ${diffLabel}</div>
+        </div>
+      `;
+      fragment.appendChild(card);
+    });
+
+    dom.worldClocksBar.innerHTML = '';
+    dom.worldClocksBar.appendChild(fragment);
+  }
+
   // --- Mise à jour de l'affichage de l'heure ---
   let lastMinuteRendered = -1;
 
@@ -347,6 +486,7 @@
     if (minutes !== lastMinuteRendered) {
       lastMinuteRendered = minutes;
       updateDateDisplay(now);
+      updateWorldClocks(now);
       applyPixelShift(minutes);
       applyEffectiveAppearance(hours24);
     }
@@ -875,6 +1015,9 @@
     document.documentElement.style.setProperty('--clock-scale', (state.scale / 100).toFixed(2));
 
     dom.topInfo.classList.toggle('hidden', !state.showDate);
+    if (dom.worldClocksBar) {
+      dom.worldClocksBar.classList.toggle('hidden', !state.showWorldClocks);
+    }
     const hideMiniWeather = !state.showWeatherBar || state.style === 'weather';
     dom.weatherMini.classList.toggle('hidden', hideMiniWeather);
 
@@ -905,6 +1048,9 @@
     dom.brightnessVal.textContent = `${state.brightness}%`;
     dom.scaleSlider.value = state.scale;
     dom.scaleVal.textContent = `${state.scale}%`;
+    if (dom.toggleWorld) {
+      dom.toggleWorld.checked = state.showWorldClocks;
+    }
     dom.toggleWeather.checked = state.showWeatherBar;
     dom.toggleEco.checked = state.ecoMode;
     dom.toggleAutoNight.checked = state.autoNight;
@@ -1126,6 +1272,23 @@
       saveState();
       applyEffectiveAppearance();
     });
+
+    if (dom.toggleWorld) {
+      dom.toggleWorld.addEventListener('change', (e) => {
+        state.showWorldClocks = e.target.checked;
+        saveState();
+        applyEffectiveAppearance();
+        updateWorldClocks(new Date());
+      });
+    }
+
+    if (dom.btnShuffleWorld) {
+      dom.btnShuffleWorld.addEventListener('click', () => {
+        state.worldOffset = (Number(state.worldOffset) || 0) + 1;
+        saveState();
+        updateWorldClocks(new Date());
+      });
+    }
 
     dom.toggleWeather.addEventListener('change', (e) => {
       state.showWeatherBar = e.target.checked;

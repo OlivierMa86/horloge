@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body class="theme-white">
 
@@ -204,6 +204,11 @@
       </div>
     </section>
 
+    <!-- Barre inférieure : 4 Grandes Villes du Monde (changent chaque jour) -->
+    <footer id="world-clocks-bar" class="world-clocks-bar" aria-label="Heures dans le monde">
+      <!-- Généré dynamiquement par app.js -->
+    </footer>
+
   </main>
 
   <!-- Indice discret au démarrage -->
@@ -216,6 +221,7 @@
       <div class="controls-header">
         <h2>Configuration Horloge, Météo & Jeedom</h2>
         <div class="header-actions">
+          <button id="btn-shuffle-world" class="action-chip" type="button" title="Tirer 4 nouvelles villes du monde">🌍 4 autres villes</button>
           <button id="btn-fullscreen" class="action-chip" type="button">⛶ Plein écran</button>
           <button id="btn-install-help" class="action-chip" type="button">📲 Guide iPad & Jeedom</button>
           <button id="btn-close-panel" class="close-btn" type="button" aria-label="Fermer">✕</button>
@@ -352,6 +358,14 @@
       <!-- Options d'économie d'énergie et d'affichage -->
       <div class="toggles-grid">
         <label class="toggle-item">
+          <input type="checkbox" id="toggle-world" checked>
+          <span class="toggle-text">
+            <strong>🌍 4 Villes du Monde en bas (changent chaque jour)</strong>
+            <small>4 villes réparties autour du globe avec drapeau, pays et heure locale</small>
+          </span>
+        </label>
+
+        <label class="toggle-item">
           <input type="checkbox" id="toggle-weather" checked>
           <span class="toggle-text">
             <strong>Afficher la météo sur toutes les horloges</strong>
@@ -423,6 +437,6 @@
   </div>
 
   <script src="weather_data.js"></script>
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>
