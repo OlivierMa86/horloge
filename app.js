@@ -665,7 +665,29 @@
     const baseUrl = (state.jeedomUrl || 'http://192.168.1.23').trim().replace(/\/+$/, '');
     const apiKey = encodeURIComponent((state.jeedomApiKey || '').trim());
     const cmdId = encodeURIComponent((state.jeedomCmdId || '').trim());
-    return `${baseUrl}/core/api/jeeApi.php?apikey=${apiKey}&type=cmd&id=${cmdId}`;
+    // Ajout de &_t=timestamp pour éviter tout cache de Safari sur la valeur de l'alarme
+    return `${baseUrl}/core/api/jeeApi.php?apikey=${apiKey}&type=cmd&id=${cmdId}&_t=${Date.now()}`;
+  }
+
+  function isJeedomValueActive(rawText, configuredTarget) {
+    const val = String(rawText || '').trim().toLowerCase();
+    const target = String(configuredTarget || '1').trim().toLowerCase();
+
+    // Si la cible configurée est une liste séparée par des virgules (ex: "1,true,Total,Nuit")
+    const targets = target.split(',').map((s) => s.trim()).filter(Boolean);
+    if (targets.includes(val)) return true;
+
+    // Si la cible par défaut est "1", considérer aussi "true", "on", "actif", "active" ou un nombre > 0
+    // et si c'est un nom de mode d'alarme (différent de "0", "false", "off", "inactif", "désactivé", "desactive", "aucun", "")
+    if (target === '1') {
+      if (val === '0' || val === 'false' || val === 'off' || val === '' || val.includes('inactif') || val.includes('désactiv') || val.includes('desactiv') || val === 'aucun' || val === 'none') {
+        return false;
+      }
+      if (val === '1' || val === 'true' || val === 'on' || Number(val) > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   async function pollJeedomAlarmState(isManualTest = false) {
@@ -681,6 +703,13 @@
         dom.jeedomStatusMsg.textContent = '⚠️ Renseignez la clé API Jeedom et l’ID de la commande État Alarme.';
       }
       return;
+    }
+
+    // Si l'utilisateur clique sur "Enregistrer & Tester Jeedom" alors que la case "Activer la liaison Jeedom" n'était pas cochée, on la coche automatiquement !
+    if (isManualTest && !state.jeedomEnabled) {
+      state.jeedomEnabled = true;
+      dom.toggleJeedom.checked = true;
+      saveState();
     }
 
     const url = buildJeedomCmdUrl();
@@ -703,12 +732,11 @@
         return;
       }
 
-      const activeTarget = String(state.jeedomActiveVal || '1').trim();
-      const alarmIsActive = rawText === activeTarget;
+      const alarmIsActive = isJeedomValueActive(rawText, state.jeedomActiveVal);
 
       const timeStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      dom.jeedomStatusMsg.textContent = `✅ Connecté à Jeedom (${timeStr}) — Valeur reçue : « ${rawText} » (${alarmIsActive ? 'ALARME ACTIVE → Veille' : 'Alarme désactivée → Horloge allumée'})`;
-      dom.jeedomBadge.textContent = alarmIsActive ? '🏠 Alarme ON' : '🏠 Jeedom OK';
+      dom.jeedomStatusMsg.textContent = `✅ Connecté à Jeedom (${timeStr}) — Valeur reçue : « ${rawText} » (${alarmIsActive ? 'ALARME ACTIVE → Mise en veille' : 'Alarme désactivée → Horloge allumée'})`;
+      dom.jeedomBadge.textContent = alarmIsActive ? `🏠 Alarme ON (${rawText})` : `🏠 Alarme OFF (${rawText})`;
       dom.jeedomBadge.classList.remove('hidden');
 
       setAlarmStandbyState(alarmIsActive, 'Alarme Jeedom');
@@ -733,6 +761,9 @@
     isAlarmStandby = shouldStandby;
 
     if (isAlarmStandby) {
+      // Fermer le panneau de réglages s'il était ouvert pour que l'écran noir recouvre tout
+      closeControlsPanel();
+
       // Activer l'écran noir intégral Zéro-Conso
       dom.standbyText.textContent = `${reason} activée — Mode Veille`;
       dom.standbyScreen.classList.remove('hidden');
