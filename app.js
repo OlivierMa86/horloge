@@ -673,19 +673,20 @@
     const val = String(rawText || '').trim().toLowerCase();
     const target = String(configuredTarget || '1').trim().toLowerCase();
 
-    // Si la cible configurée est une liste séparée par des virgules (ex: "1,true,Total,Nuit")
+    // Valeurs qui signifient explicitement que l'alarme est DÉSACTIVÉE
+    const inactiveValues = ['0', 'false', 'off', '', 'inactif', 'inactive', 'désactivé', 'desactive', 'désactivée', 'desactivee', 'aucun', 'none', 'arret', 'arrêt', 'disarmed'];
+
+    // Si la cible configurée est une liste séparée par des virgules (ex: "1,true,Total,Nuit,Présent,Absent")
     const targets = target.split(',').map((s) => s.trim()).filter(Boolean);
     if (targets.includes(val)) return true;
 
-    // Si la cible par défaut est "1", considérer aussi "true", "on", "actif", "active" ou un nombre > 0
-    // et si c'est un nom de mode d'alarme (différent de "0", "false", "off", "inactif", "désactivé", "desactive", "aucun", "")
+    // Si la cible configurée est restée sur "1" par défaut :
+    // Toute valeur qui n'est PAS dans inactiveValues (ex: "1", "Total", "Nuit", "Absent", "Présent", "Activée") est considérée comme ALARME ACTIVE !
     if (target === '1') {
-      if (val === '0' || val === 'false' || val === 'off' || val === '' || val.includes('inactif') || val.includes('désactiv') || val.includes('desactiv') || val === 'aucun' || val === 'none') {
+      if (inactiveValues.includes(val) || val.includes('inactif') || val.includes('désactiv') || val.includes('desactiv')) {
         return false;
       }
-      if (val === '1' || val === 'true' || val === 'on' || Number(val) > 0) {
-        return true;
-      }
+      return true;
     }
     return false;
   }
@@ -756,15 +757,23 @@
     }
   }
 
+  let manualWakeUntil = 0;
+
   function setAlarmStandbyState(shouldStandby, reason = 'Alarme Jeedom') {
-    if (shouldStandby === isAlarmStandby) return;
+    // Si l'utilisateur a touché l'écran noir pour jeter un coup d'œil à l'heure, on laisse l'écran allumé 15 secondes avant de le remettre en noir
+    if (shouldStandby && Date.now() < manualWakeUntil) {
+      return;
+    }
+
     isAlarmStandby = shouldStandby;
 
     if (isAlarmStandby) {
-      // Fermer le panneau de réglages s'il était ouvert pour que l'écran noir recouvre tout
+      // Fermer le panneau de réglages s'il était ouvert
       closeControlsPanel();
 
-      // Activer l'écran noir intégral Zéro-Conso
+      // Masquer explicitement toute la scène de l'horloge (#clock-stage) ET afficher l'écran noir #000000 par-dessus
+      dom.stage.classList.add('hidden');
+      dom.tapHint.classList.add('hidden');
       dom.standbyText.textContent = `${reason} activée — Mode Veille`;
       dom.standbyScreen.classList.remove('hidden');
       dom.standbyIndicator.classList.remove('dimmed');
@@ -782,6 +791,7 @@
     } else {
       // Désactivation de l'alarme -> Rallumer immédiatement l'horloge !
       dom.standbyScreen.classList.add('hidden');
+      dom.stage.classList.remove('hidden');
       lastMinuteRendered = -1;
       requestWakeLock();
       scheduleNextTick();
@@ -1220,9 +1230,10 @@
       openControlsPanel();
     });
 
-    // Si l'écran est en veille noire Alarme et qu'on touche l'écran, on affiche l'horloge temporairement
+    // Si l'écran est en veille noire Alarme et qu'on touche l'écran, on affiche l'horloge temporairement pendant 15s
     dom.standbyScreen.addEventListener('click', () => {
-      setAlarmStandbyState(false, 'Réveil tactile');
+      manualWakeUntil = Date.now() + 15000;
+      setAlarmStandbyState(false, 'Réveil tactile (15s)');
     });
 
     dom.panel.addEventListener('click', (e) => {
