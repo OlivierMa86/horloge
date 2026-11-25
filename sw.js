@@ -1,4 +1,4 @@
-const CACHE_NAME = 'horloge-ipad-v4';
+const CACHE_NAME = 'horloge-ipad-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -30,6 +30,7 @@ self.addEventListener('fetch', (event) => {
   // Ne jamais mettre en cache les appels API Météo, weather_data.js local ou API Jeedom
   if (
     url.hostname.includes('open-meteo.com') ||
+    url.pathname.includes('config_local.js') ||
     url.pathname.includes('weather_data.js') ||
     url.pathname.includes('weather_data.json') ||
     url.pathname.includes('weather_proxy.php') ||

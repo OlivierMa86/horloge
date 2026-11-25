@@ -157,6 +157,7 @@
     standbyHoursRow: document.getElementById('standby-hours-row'),
     toggleDate: document.getElementById('toggle-date'),
     toggle24h: document.getElementById('toggle-24h'),
+    btnReloadApp: document.getElementById('btn-reload-app'),
     btnFullscreen: document.getElementById('btn-fullscreen'),
     btnInstallHelp: document.getElementById('btn-install-help'),
     btnClosePanel: document.getElementById('btn-close-panel'),
@@ -254,15 +255,28 @@
   };
 
   function loadState() {
+    // Supporte un fichier local config_local.js sur Jeedom (window.HORLOGE_DEFAULT_CONFIG)
+    // pour pré-remplir automatiquement la clé API, l'ID alarme, le style et la ville sans jamais les perdre
+    const localServerConfig = (typeof window !== 'undefined' && window.HORLOGE_DEFAULT_CONFIG) ? window.HORLOGE_DEFAULT_CONFIG : {};
+    const mergedDefaults = { ...defaultState, ...localServerConfig };
     try {
       const raw =
         localStorage.getItem(STORAGE_KEY) ||
         localStorage.getItem('horloge_ipad_prefs_v2') ||
         localStorage.getItem('horloge_ipad_prefs_v1');
-      if (!raw) return { ...defaultState };
-      return { ...defaultState, ...JSON.parse(raw) };
+      if (!raw) return { ...mergedDefaults };
+      const parsed = JSON.parse(raw);
+      // Si localStorage avait une clé API vide mais que config_local.js en fournit une, on utilise celle de config_local.js
+      if (!parsed.jeedomApiKey && localServerConfig.jeedomApiKey) {
+        parsed.jeedomApiKey = localServerConfig.jeedomApiKey;
+      }
+      if (!parsed.jeedomCmdId && localServerConfig.jeedomCmdId) {
+        parsed.jeedomCmdId = localServerConfig.jeedomCmdId;
+        parsed.jeedomEnabled = true;
+      }
+      return { ...mergedDefaults, ...parsed };
     } catch (e) {
-      return { ...defaultState };
+      return { ...mergedDefaults };
     }
   }
 
@@ -1477,6 +1491,29 @@
       saveState();
       updateClock();
     });
+
+    if (dom.btnReloadApp) {
+      dom.btnReloadApp.addEventListener('click', async () => {
+        saveState();
+        try {
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (const reg of regs) {
+              await reg.unregister();
+            }
+          }
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            for (const k of keys) {
+              await caches.delete(k);
+            }
+          }
+        } catch (e) {}
+        // Recharger la page avec un timestamp pour forcer iPadOS WebApp à prendre la dernière version tout en gardant localStorage !
+        const baseUrl = window.location.pathname;
+        window.location.replace(`${baseUrl}?v=${Date.now()}`);
+      });
+    }
 
     dom.btnFullscreen.addEventListener('click', () => {
       const docEl = document.documentElement;
