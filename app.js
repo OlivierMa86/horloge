@@ -286,6 +286,57 @@
     } catch (e) {}
   }
 
+  // Charge dynamiquement config_local.js avec un timestamp anti-cache (comme weather_data.js)
+  // pour que Safari sur iPad ne garde jamais la version vide en cache !
+  function loadLocalConfigScript() {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = `./config_local.js?t=${Date.now()}`;
+      script.onload = () => {
+        resolve(window.HORLOGE_DEFAULT_CONFIG || null);
+        script.remove();
+      };
+      script.onerror = () => {
+        resolve(window.HORLOGE_DEFAULT_CONFIG || null);
+        script.remove();
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  function applyLocalServerConfig(localServerConfig) {
+    if (!localServerConfig || typeof localServerConfig !== 'object') return;
+    let changed = false;
+
+    if (localServerConfig.jeedomApiKey && (!state.jeedomApiKey || state.jeedomApiKey === 'VOTRE_CLE_API')) {
+      state.jeedomApiKey = String(localServerConfig.jeedomApiKey).trim();
+      changed = true;
+    }
+    if (localServerConfig.jeedomCmdId && (!state.jeedomCmdId || state.jeedomCmdId === 'VOTRE_ID_CMD')) {
+      state.jeedomCmdId = String(localServerConfig.jeedomCmdId).trim();
+      state.jeedomEnabled = true;
+      changed = true;
+    }
+    if (localServerConfig.jeedomUrl && !state.jeedomUrl) {
+      state.jeedomUrl = String(localServerConfig.jeedomUrl).trim();
+      changed = true;
+    }
+    if (typeof localServerConfig.jeedomEnabled === 'boolean' && localServerConfig.jeedomApiKey && localServerConfig.jeedomCmdId) {
+      state.jeedomEnabled = localServerConfig.jeedomEnabled;
+      changed = true;
+    }
+    if (localServerConfig.style && !localStorage.getItem(STORAGE_KEY)) {
+      state.style = localServerConfig.style;
+      changed = true;
+    }
+
+    if (changed) {
+      saveState();
+      applyEffectiveAppearance();
+      startJeedomSchedule();
+    }
+  }
+
   // Permet aussi de pré-configurer Jeedom ou déclencher la veille par paramètres d'URL
   // Exemple : ?standby=1 ou ?jeedomUrl=http://192.168.1.23&apikey=XXX&cmdId=452
   function checkUrlParameters() {
@@ -1563,10 +1614,12 @@
     }
   }
 
-  function init() {
+  async function init() {
     initAnalogClock();
     initWordClock();
     initRingsClock();
+    const freshConfig = await loadLocalConfigScript();
+    applyLocalServerConfig(freshConfig);
     checkUrlParameters();
     applyEffectiveAppearance();
     bindEvents();
