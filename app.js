@@ -1545,6 +1545,7 @@
 
     if (dom.btnReloadApp) {
       dom.btnReloadApp.addEventListener('click', async () => {
+        dom.btnReloadApp.textContent = '⏳ Mise à jour…';
         saveState();
         try {
           if ('serviceWorker' in navigator) {
@@ -1559,10 +1560,18 @@
               await caches.delete(k);
             }
           }
+          // Forcer WebKit / iPadOS à re-télécharger index.html, app.js, style.css et config_local.js depuis Apache (cache: 'reload')
+          await Promise.allSettled([
+            fetch('./index.html', { cache: 'reload' }),
+            fetch('./app.js', { cache: 'reload' }),
+            fetch('./style.css', { cache: 'reload' }),
+            fetch('./config_local.js', { cache: 'reload' }),
+            fetch('./weather_data.js', { cache: 'reload' })
+          ]);
         } catch (e) {}
-        // Recharger la page avec un timestamp pour forcer iPadOS WebApp à prendre la dernière version tout en gardant localStorage !
+        // Recharger la page avec un timestamp pour forcer la WebApp de l'écran d'accueil à utiliser la nouvelle version
         const baseUrl = window.location.pathname;
-        window.location.replace(`${baseUrl}?v=${Date.now()}`);
+        window.location.href = `${baseUrl}?v=${Date.now()}`;
       });
     }
 
