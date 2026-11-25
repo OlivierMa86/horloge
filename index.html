@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body class="theme-white">
 
@@ -355,6 +355,54 @@
         </div>
       </div>
 
+      <!-- Plages horaires : Mode Nuit (Rouge) & Veille programmée -->
+      <div class="control-group">
+        <label class="group-label">Plages horaires automatiques</label>
+        <div class="schedules-grid">
+          <!-- 1. Mode Nuit Rouge -->
+          <div class="schedule-config-card">
+            <label class="toggle-item full-width-toggle">
+              <input type="checkbox" id="toggle-autonight" checked>
+              <span class="toggle-text">
+                <strong>🌙 Mode Nuit Auto (Couleur rouge)</strong>
+                <small>Bascule en rouge sombre (15%) sur la plage horaire</small>
+              </span>
+            </label>
+            <div id="night-hours-row" class="schedule-time-row">
+              <div class="time-field">
+                <label for="night-start-time" class="time-label">De :</label>
+                <input type="time" id="night-start-time" class="time-input" value="22:00">
+              </div>
+              <div class="time-field">
+                <label for="night-end-time" class="time-label">à :</label>
+                <input type="time" id="night-end-time" class="time-input" value="07:00">
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Mise en veille programmée -->
+          <div class="schedule-config-card">
+            <label class="toggle-item full-width-toggle">
+              <input type="checkbox" id="toggle-autostandby">
+              <span class="toggle-text">
+                <strong>💤 Veille programmée (Écran noir zéro-conso)</strong>
+                <small>Éteint l'écran (réveil tactile de 15s d'un simple toucher)</small>
+              </span>
+            </label>
+            <div id="standby-hours-row" class="schedule-time-row">
+              <div class="time-field">
+                <label for="standby-start-time" class="time-label">De :</label>
+                <input type="time" id="standby-start-time" class="time-input" value="23:00">
+              </div>
+              <div class="time-field">
+                <label for="standby-end-time" class="time-label">à :</label>
+                <input type="time" id="standby-end-time" class="time-input" value="07:00">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Options d'économie d'énergie et d'affichage -->
       <div class="toggles-grid">
         <label class="toggle-item">
@@ -378,14 +426,6 @@
           <span class="toggle-text">
             <strong>Mode Ultra-Éco (1/min)</strong>
             <small>Masque les secondes & ne rafraîchit le CPU qu'une fois par minute</small>
-          </span>
-        </label>
-
-        <label class="toggle-item">
-          <input type="checkbox" id="toggle-autonight" checked>
-          <span class="toggle-text">
-            <strong>Mode Nuit Auto (22h - 07h)</strong>
-            <small>Bascule en rouge sombre (15%) automatiquement la nuit</small>
           </span>
         </label>
 
@@ -437,6 +477,6 @@
   </div>
 
   <script src="weather_data.js"></script>
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

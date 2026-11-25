@@ -1,4 +1,4 @@
-const CACHE_NAME = 'horloge-ipad-v3';
+const CACHE_NAME = 'horloge-ipad-v4';
 const ASSETS = [
   './',
   './index.html',

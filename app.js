@@ -22,6 +22,11 @@
     scale: 100,
     ecoMode: false,
     autoNight: true,
+    nightStart: '22:00',
+    nightEnd: '07:00',
+    autoStandby: false,
+    standbyStart: '23:00',
+    standbyEnd: '07:00',
     showDate: true,
     showWeatherBar: true,
     showWorldClocks: true,
@@ -45,6 +50,8 @@
   let weatherTimer = null;
   let jeedomTimer = null;
   let isAlarmStandby = false;
+  let isJeedomStandby = false;
+  let isScheduleStandby = false;
   let wakeLockSentinel = null;
   let noSleepAudioCtx = null;
   let noSleepInterval = null;
@@ -141,6 +148,13 @@
     toggleWeather: document.getElementById('toggle-weather'),
     toggleEco: document.getElementById('toggle-eco'),
     toggleAutoNight: document.getElementById('toggle-autonight'),
+    nightStartTime: document.getElementById('night-start-time'),
+    nightEndTime: document.getElementById('night-end-time'),
+    nightHoursRow: document.getElementById('night-hours-row'),
+    toggleAutoStandby: document.getElementById('toggle-autostandby'),
+    standbyStartTime: document.getElementById('standby-start-time'),
+    standbyEndTime: document.getElementById('standby-end-time'),
+    standbyHoursRow: document.getElementById('standby-hours-row'),
     toggleDate: document.getElementById('toggle-date'),
     toggle24h: document.getElementById('toggle-24h'),
     btnFullscreen: document.getElementById('btn-fullscreen'),
@@ -283,7 +297,8 @@
 
     if (params.has('standby')) {
       const val = params.get('standby');
-      setAlarmStandbyState(val === '1' || val === 'true', 'Commande URL Jeedom');
+      isJeedomStandby = (val === '1' || val === 'true');
+      checkStandbySchedule();
     }
   }
 
@@ -471,14 +486,32 @@
     dom.worldClocksBar.appendChild(fragment);
   }
 
+  // Helper pour vérifier si l'heure actuelle est dans une plage horaire [start, end]
+  function isCurrentTimeInWindow(startTimeStr, endTimeStr, nowDate = new Date()) {
+    if (!startTimeStr || !endTimeStr || startTimeStr === endTimeStr) return false;
+    const [startH, startM] = (startTimeStr || '00:00').split(':').map(Number);
+    const [endH, endM] = (endTimeStr || '00:00').split(':').map(Number);
+    if (isNaN(startH) || isNaN(endH)) return false;
+
+    const curMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
+    const startMinutes = (startH % 24) * 60 + ((startM || 0) % 60);
+    const endMinutes = (endH % 24) * 60 + ((endM || 0) % 60);
+
+    if (startMinutes < endMinutes) {
+      return curMinutes >= startMinutes && curMinutes < endMinutes;
+    } else {
+      // Plage traversant minuit (ex: 22:00 -> 07:00)
+      return curMinutes >= startMinutes || curMinutes < endMinutes;
+    }
+  }
+
   // --- Mise à jour de l'affichage de l'heure ---
   let lastMinuteRendered = -1;
 
-  function updateClock() {
-    // Si l'alarme Jeedom a mis l'horloge en veille noire, ne rien dessiner (0% CPU/GPU)
+  function updateClock(now = new Date()) {
+    // Si l'alarme Jeedom ou la veille a mis l'horloge en veille noire, ne rien dessiner (0% CPU/GPU)
     if (isAlarmStandby) return;
 
-    const now = new Date();
     const hours24 = now.getHours();
     const minutes = now.getMinutes();
     const seconds = now.getSeconds();
@@ -488,7 +521,7 @@
       updateDateDisplay(now);
       updateWorldClocks(now);
       applyPixelShift(minutes);
-      applyEffectiveAppearance(hours24);
+      applyEffectiveAppearance(now);
     }
 
     const displayHours = state.use24h ? hours24 : (hours24 % 12 || 12);
@@ -740,7 +773,8 @@
       dom.jeedomBadge.textContent = alarmIsActive ? `🏠 Alarme ON (${rawText})` : `🏠 Alarme OFF (${rawText})`;
       dom.jeedomBadge.classList.remove('hidden');
 
-      setAlarmStandbyState(alarmIsActive, 'Alarme Jeedom');
+      isJeedomStandby = alarmIsActive;
+      checkStandbySchedule();
     } catch (err) {
       const isMixedContent =
         window.location.protocol === 'https:' &&
@@ -759,9 +793,30 @@
 
   let manualWakeUntil = 0;
 
-  function setAlarmStandbyState(shouldStandby, reason = 'Alarme Jeedom') {
-    // Si l'utilisateur a touché l'écran noir pour jeter un coup d'œil à l'heure, on laisse l'écran allumé 15 secondes avant de le remettre en noir
-    if (shouldStandby && Date.now() < manualWakeUntil) {
+  function checkStandbySchedule(now = new Date()) {
+    if (state.autoStandby) {
+      isScheduleStandby = isCurrentTimeInWindow(state.standbyStart || '23:00', state.standbyEnd || '07:00', now);
+    } else {
+      isScheduleStandby = false;
+    }
+
+    const shouldStandby = isJeedomStandby || isScheduleStandby;
+    const reason = isJeedomStandby ? 'Alarme Jeedom' : 'Veille programmée';
+    setStandbyState(shouldStandby, reason);
+  }
+
+  function setStandbyState(shouldStandby, reason = 'Mode Veille', force = false) {
+    // Si l'utilisateur a touché l'écran noir pour voir l'heure ou consulte les réglages
+    if (shouldStandby && !force) {
+      if (Date.now() < manualWakeUntil) {
+        return;
+      }
+      if (dom.panel && !dom.panel.classList.contains('hidden')) {
+        return;
+      }
+    }
+
+    if (isAlarmStandby === shouldStandby) {
       return;
     }
 
@@ -774,7 +829,11 @@
       // Masquer explicitement toute la scène de l'horloge (#clock-stage) ET afficher l'écran noir #000000 par-dessus
       dom.stage.classList.add('hidden');
       dom.tapHint.classList.add('hidden');
-      dom.standbyText.textContent = `${reason} activée — Mode Veille`;
+      if (reason === 'Veille programmée') {
+        dom.standbyText.textContent = `Veille de nuit — Touchez pour afficher l'heure`;
+      } else {
+        dom.standbyText.textContent = `${reason} activée — Mode Veille`;
+      }
       dom.standbyScreen.classList.remove('hidden');
       dom.standbyIndicator.classList.remove('dimmed');
 
@@ -789,7 +848,7 @@
         releaseWakeLock();
       }
     } else {
-      // Désactivation de l'alarme -> Rallumer immédiatement l'horloge !
+      // Désactivation de la veille -> Rallumer immédiatement l'horloge !
       dom.standbyScreen.classList.add('hidden');
       dom.stage.classList.remove('hidden');
       lastMinuteRendered = -1;
@@ -797,6 +856,8 @@
       scheduleNextTick();
     }
   }
+
+  const setAlarmStandbyState = setStandbyState;
 
   function startJeedomSchedule() {
     if (jeedomTimer) clearInterval(jeedomTimer);
@@ -1029,11 +1090,15 @@
     if (tickTimer) {
       clearTimeout(tickTimer);
     }
-    updateClock();
 
     const now = new Date();
+    checkStandbySchedule(now);
+    updateClock(now);
+
     let delayMs;
-    if (state.ecoMode) {
+    if (isAlarmStandby) {
+      delayMs = 5000;
+    } else if (state.ecoMode) {
       delayMs = (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 20;
     } else {
       delayMs = 1000 - now.getMilliseconds() + 10;
@@ -1043,8 +1108,9 @@
   }
 
   // --- Application de l'apparence & Mode Nuit Automatique ---
-  function applyEffectiveAppearance(currentHour = new Date().getHours()) {
-    const isNightHours = currentHour >= 22 || currentHour < 7;
+  function applyEffectiveAppearance(now = new Date()) {
+    const nowDate = (now instanceof Date) ? now : new Date();
+    const isNightHours = isCurrentTimeInWindow(state.nightStart || '22:00', state.nightEnd || '07:00', nowDate);
     const useNightOverride = state.autoNight && isNightHours;
 
     dom.body.className = useNightOverride ? 'theme-red' : state.theme;
@@ -1094,9 +1160,22 @@
     }
     dom.toggleWeather.checked = state.showWeatherBar;
     dom.toggleEco.checked = state.ecoMode;
-    dom.toggleAutoNight.checked = state.autoNight;
     dom.toggleDate.checked = state.showDate;
     dom.toggle24h.checked = state.use24h;
+
+    // Synchroniser les plages horaires Mode Nuit et Veille
+    if (dom.toggleAutoNight) {
+      dom.toggleAutoNight.checked = !!state.autoNight;
+      dom.nightStartTime.value = state.nightStart || '22:00';
+      dom.nightEndTime.value = state.nightEnd || '07:00';
+      dom.nightHoursRow.classList.toggle('disabled', !state.autoNight);
+    }
+    if (dom.toggleAutoStandby) {
+      dom.toggleAutoStandby.checked = !!state.autoStandby;
+      dom.standbyStartTime.value = state.standbyStart || '23:00';
+      dom.standbyEndTime.value = state.standbyEnd || '07:00';
+      dom.standbyHoursRow.classList.toggle('disabled', !state.autoStandby);
+    }
 
     // Synchroniser les champs Jeedom
     dom.toggleJeedom.checked = state.jeedomEnabled;
@@ -1197,6 +1276,7 @@
   function closeControlsPanel() {
     dom.panel.classList.add('hidden');
     if (hidePanelTimeout) clearTimeout(hidePanelTimeout);
+    checkStandbySchedule();
   }
 
   function resetAutoCloseTimer() {
@@ -1230,10 +1310,10 @@
       openControlsPanel();
     });
 
-    // Si l'écran est en veille noire Alarme et qu'on touche l'écran, on affiche l'horloge temporairement pendant 15s
+    // Si l'écran est en veille noire et qu'on touche l'écran, on affiche l'horloge temporairement pendant 15s
     dom.standbyScreen.addEventListener('click', () => {
       manualWakeUntil = Date.now() + 15000;
-      setAlarmStandbyState(false, 'Réveil tactile (15s)');
+      setStandbyState(false, 'Réveil tactile (15s)', true);
     });
 
     dom.panel.addEventListener('click', (e) => {
@@ -1268,12 +1348,13 @@
       startJeedomSchedule();
     });
 
-    // Bouton de simulation de mise en veille Alarme pendant 5 secondes
+    // Bouton de simulation de mise en veille pendant 5 secondes
     dom.btnSimAlarm.addEventListener('click', () => {
       closeControlsPanel();
-      setAlarmStandbyState(true, 'Test Alarme (5s)');
+      setStandbyState(true, 'Test Veille (5s)', true);
       setTimeout(() => {
-        setAlarmStandbyState(false, 'Fin du test');
+        setStandbyState(false, 'Fin du test', true);
+        checkStandbySchedule();
       }, 5000);
     });
 
@@ -1345,10 +1426,44 @@
       scheduleNextTick();
     });
 
+    // Plages horaires automatiques : Mode Nuit (Rouge) & Veille
     dom.toggleAutoNight.addEventListener('change', (e) => {
       state.autoNight = e.target.checked;
       saveState();
       applyEffectiveAppearance();
+    });
+
+    ['change', 'input'].forEach((evt) => {
+      dom.nightStartTime.addEventListener(evt, (e) => {
+        state.nightStart = e.target.value || '22:00';
+        saveState();
+        applyEffectiveAppearance();
+      });
+      dom.nightEndTime.addEventListener(evt, (e) => {
+        state.nightEnd = e.target.value || '07:00';
+        saveState();
+        applyEffectiveAppearance();
+      });
+    });
+
+    dom.toggleAutoStandby.addEventListener('change', (e) => {
+      state.autoStandby = e.target.checked;
+      saveState();
+      applyEffectiveAppearance();
+      checkStandbySchedule();
+    });
+
+    ['change', 'input'].forEach((evt) => {
+      dom.standbyStartTime.addEventListener(evt, (e) => {
+        state.standbyStart = e.target.value || '23:00';
+        saveState();
+        checkStandbySchedule();
+      });
+      dom.standbyEndTime.addEventListener(evt, (e) => {
+        state.standbyEnd = e.target.value || '07:00';
+        saveState();
+        checkStandbySchedule();
+      });
     });
 
     dom.toggleDate.addEventListener('change', (e) => {
@@ -1418,6 +1533,7 @@
     checkUrlParameters();
     applyEffectiveAppearance();
     bindEvents();
+    checkStandbySchedule();
     scheduleNextTick();
     startWeatherSchedule();
     startJeedomSchedule();

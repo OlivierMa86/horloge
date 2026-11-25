@@ -11,7 +11,9 @@ Puis touchez **Partager** → **Sur l'écran d'accueil** pour l'installer comme 
 ## Fonctionnalités
 - **6 styles d'horloges** : Digitale Géante, Flip Rétro, Gare Suisse (CFF), En Lettres (Français), LED / Nixie, Anneaux concentriques.
 - **Mode Ultra-Éco (1/min)** : Masque les secondes et ne rafraîchit l'écran qu'une seule fois par minute.
-- **Mode Nuit Auto (22h–07h)** : Bascule automatiquement en rouge sombre (15 %) la nuit.
+- **Mode Nuit Auto (paramétrable)** : Bascule automatiquement en rouge sombre (15 %) sur la plage horaire de votre choix (ex: 22h–07h).
+- **Mise en veille programmée** : Éteint l'écran (zéro-conso) sur la plage horaire choisie avec réveil tactile d'un simple toucher (15s).
 - **Anti-veille** : Screen Wake Lock API + fallback audio silencieux.
 - **Protection d'écran (Pixel Shifting)** : Léger décalage circulaire chaque minute.
 - **100 % Hors-ligne** grâce au Service Worker (`sw.js`).
+
