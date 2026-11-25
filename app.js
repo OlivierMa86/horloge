@@ -280,10 +280,30 @@
     }
   }
 
+  // Synchronise les réglages essentiels (Clé API Jeedom, ID Alarme, Style) dans l'URL de la page
+  // pour que lors d'un "Ajouter à l'écran d'accueil" depuis Safari sur iPad, le raccourci embarque
+  // directement la clé API et l'ID d'alarme dans son adresse sans jamais les perdre !
+  function syncSettingsToUrlBar() {
+    try {
+      const url = new URL(window.location.href);
+      if (state.jeedomApiKey) {
+        url.searchParams.set('apikey', state.jeedomApiKey);
+      }
+      if (state.jeedomCmdId) {
+        url.searchParams.set('cmdId', state.jeedomCmdId);
+      }
+      if (state.style) {
+        url.searchParams.set('style', state.style);
+      }
+      window.history.replaceState(null, '', url.toString());
+    } catch (e) {}
+  }
+
   function saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {}
+    syncSettingsToUrlBar();
   }
 
   // Charge dynamiquement config_local.js avec un timestamp anti-cache (comme weather_data.js)
@@ -343,21 +363,27 @@
     const params = new URLSearchParams(window.location.search);
     let updated = false;
 
-    if (params.has('jeedomUrl')) {
+    if (params.has('jeedomUrl') && params.get('jeedomUrl')) {
       state.jeedomUrl = params.get('jeedomUrl');
       updated = true;
     }
-    if (params.has('apikey')) {
+    if (params.has('apikey') && params.get('apikey')) {
       state.jeedomApiKey = params.get('apikey');
       updated = true;
     }
-    if (params.has('cmdId')) {
+    if (params.has('cmdId') && params.get('cmdId')) {
       state.jeedomCmdId = params.get('cmdId');
       state.jeedomEnabled = true;
       updated = true;
     }
+    if (params.has('style') && params.get('style')) {
+      state.style = params.get('style');
+      updated = true;
+    }
     if (updated) {
       saveState();
+    } else {
+      syncSettingsToUrlBar();
     }
 
     if (params.has('standby')) {
@@ -1569,9 +1595,13 @@
             fetch('./weather_data.js', { cache: 'reload' })
           ]);
         } catch (e) {}
-        // Recharger la page avec un timestamp pour forcer la WebApp de l'écran d'accueil à utiliser la nouvelle version
-        const baseUrl = window.location.pathname;
-        window.location.href = `${baseUrl}?v=${Date.now()}`;
+        // Recharger la page avec un timestamp tout en gardant les paramètres d'URL (apikey, cmdId, style) !
+        const reloadUrl = new URL(window.location.href);
+        reloadUrl.searchParams.set('v', Date.now());
+        if (state.jeedomApiKey) reloadUrl.searchParams.set('apikey', state.jeedomApiKey);
+        if (state.jeedomCmdId) reloadUrl.searchParams.set('cmdId', state.jeedomCmdId);
+        if (state.style) reloadUrl.searchParams.set('style', state.style);
+        window.location.href = reloadUrl.toString();
       });
     }
 
