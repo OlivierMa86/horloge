@@ -14,7 +14,7 @@
   
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
 </head>
 <body class="theme-white">
 
@@ -174,7 +174,13 @@
             <div class="st-main-weather">
               <span id="st-icon" class="st-big-icon">⛅</span>
               <div class="st-temp-col">
-                <span id="st-temp" class="st-big-temp">--°C</span>
+                <div class="st-temps-split">
+                  <div class="st-temp-primary-line">
+                    <span id="st-temp" class="st-big-temp">--°C</span>
+                    <span id="st-temp-source" class="st-temp-badge hidden">Terrasse</span>
+                  </div>
+                  <div id="st-temp-sub" class="st-temp-subline hidden">Météo Poitiers : --°C</div>
+                </div>
                 <span id="st-desc" class="st-condition-text">Chargement…</span>
               </div>
             </div>
@@ -286,6 +292,10 @@
             <div class="field-col">
               <span class="field-label">ID commande État Alarme</span>
               <input type="text" id="jeedom-cmdid" class="city-input" placeholder="Ex: 452" inputmode="numeric" autocomplete="off">
+            </div>
+            <div class="field-col">
+              <span class="field-label">ID Capteur Temp. Terrasse (°C)</span>
+              <input type="text" id="jeedom-temp-cmdid" class="city-input" value="1599" placeholder="1599" inputmode="numeric" autocomplete="off">
             </div>
           </div>
 
@@ -476,8 +486,8 @@
     </div>
   </div>
 
-  <script src="config_local.js?v=16"></script>
+  <script src="config_local.js?v=17"></script>
   <script src="weather_data.js"></script>
-  <script src="app.js?v=16"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

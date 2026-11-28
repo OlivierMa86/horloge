@@ -40,12 +40,15 @@
     jeedomUrl: 'http://192.168.1.23',
     jeedomApiKey: '',
     jeedomCmdId: '',
+    jeedomTempCmdId: '1599',
     jeedomActiveVal: '1',
     jeedomIntervalSec: 15,
     jeedomStandbyMode: 'blackout_auto' // blackout_auto | blackout_release
   };
 
   let state = loadState();
+  let lastWeatherTemp = null;
+  let lastTerraceTemp = null;
   let tickTimer = null;
   let weatherTimer = null;
   let jeedomTimer = null;
@@ -123,6 +126,8 @@
     stUpdated: document.getElementById('st-updated'),
     stIcon: document.getElementById('st-icon'),
     stTemp: document.getElementById('st-temp'),
+    stTempSource: document.getElementById('st-temp-source'),
+    stTempSub: document.getElementById('st-temp-sub'),
     stDesc: document.getElementById('st-desc'),
     stFeels: document.getElementById('st-feels'),
     stMinmax: document.getElementById('st-minmax'),
@@ -169,6 +174,7 @@
     jeedomUrl: document.getElementById('jeedom-url'),
     jeedomApiKey: document.getElementById('jeedom-apikey'),
     jeedomCmdId: document.getElementById('jeedom-cmdid'),
+    jeedomTempCmdId: document.getElementById('jeedom-temp-cmdid'),
     jeedomActiveVal: document.getElementById('jeedom-active-val'),
     jeedomInterval: document.getElementById('jeedom-interval'),
     jeedomStandbyMode: document.getElementById('jeedom-standby-mode'),
@@ -292,6 +298,9 @@
       if (state.jeedomCmdId) {
         url.searchParams.set('cmdId', state.jeedomCmdId);
       }
+      if (state.jeedomTempCmdId) {
+        url.searchParams.set('tempId', state.jeedomTempCmdId);
+      }
       if (state.style) {
         url.searchParams.set('style', state.style);
       }
@@ -374,6 +383,10 @@
     if (params.has('cmdId') && params.get('cmdId')) {
       state.jeedomCmdId = params.get('cmdId');
       state.jeedomEnabled = true;
+      updated = true;
+    }
+    if (params.has('tempId') && params.get('tempId')) {
+      state.jeedomTempCmdId = params.get('tempId');
       updated = true;
     }
     if (params.has('style') && params.get('style')) {
@@ -783,14 +796,67 @@
   }
 
   // ==========================================================================
-  // MODULE JEEDOM — PILOTAGE DE LA VEILLE PAR L'ÉTAT DE L'ALARME (192.168.1.23)
+  // MODULE JEEDOM — PILOTAGE DE LA VEILLE PAR L'ÉTAT DE L'ALARME & CAPTEUR TERRASSE (1599)
   // ==========================================================================
-  function buildJeedomCmdUrl() {
+  function buildJeedomCmdUrl(customCmdId) {
     const baseUrl = (state.jeedomUrl || 'http://192.168.1.23').trim().replace(/\/+$/, '');
     const apiKey = encodeURIComponent((state.jeedomApiKey || '').trim());
-    const cmdId = encodeURIComponent((state.jeedomCmdId || '').trim());
-    // Ajout de &_t=timestamp pour éviter tout cache de Safari sur la valeur de l'alarme
+    const cmdId = encodeURIComponent(String(customCmdId || state.jeedomCmdId || '').trim());
     return `${baseUrl}/core/api/jeeApi.php?apikey=${apiKey}&type=cmd&id=${cmdId}&_t=${Date.now()}`;
+  }
+
+  function updateTemperatureDisplays() {
+    // 1. Si on a reçu la vraie température de la sonde Terrasse Jeedom (avec 1 décimale, ex: 14,3°C)
+    if (lastTerraceTemp !== null && !isNaN(lastTerraceTemp)) {
+      const formattedTerrace = lastTerraceTemp.toFixed(1).replace('.', ',');
+      dom.stTemp.textContent = `${formattedTerrace}°C`;
+      if (dom.stTempSource) {
+        dom.stTempSource.textContent = 'Terrasse';
+        dom.stTempSource.classList.remove('hidden');
+      }
+      if (dom.stTempSub) {
+        if (lastWeatherTemp !== null) {
+          dom.stTempSub.textContent = `Météo ${state.city} : ${lastWeatherTemp}°C`;
+          dom.stTempSub.classList.remove('hidden');
+        } else {
+          dom.stTempSub.classList.add('hidden');
+        }
+      }
+      // Pilule météo en haut (pour les autres styles d'horloge) : afficher les deux si dispo
+      if (lastWeatherTemp !== null) {
+        dom.wmTemp.textContent = `${formattedTerrace}°C (Météo ${lastWeatherTemp}°C)`;
+      } else {
+        dom.wmTemp.textContent = `${formattedTerrace}°C`;
+      }
+    } else if (lastWeatherTemp !== null) {
+      // 2. Sinon afficher uniquement la température météo Open-Meteo
+      dom.stTemp.textContent = `${lastWeatherTemp}°C`;
+      if (dom.stTempSource) {
+        dom.stTempSource.classList.add('hidden');
+      }
+      if (dom.stTempSub) {
+        dom.stTempSub.classList.add('hidden');
+      }
+      dom.wmTemp.textContent = `${lastWeatherTemp}°C`;
+    }
+  }
+
+  async function pollJeedomTerraceTemp() {
+    const apiKey = (state.jeedomApiKey || '').trim();
+    const tempCmdId = String(state.jeedomTempCmdId || '1599').trim();
+    if (!apiKey || !tempCmdId) return;
+
+    try {
+      const url = buildJeedomCmdUrl(tempCmdId);
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) return;
+      const rawText = (await response.text()).trim().replace(/^"|"$/g, '').replace(',', '.');
+      const parsed = parseFloat(rawText);
+      if (!isNaN(parsed) && parsed > -60 && parsed < 80) {
+        lastTerraceTemp = Math.round(parsed * 10) / 10;
+        updateTemperatureDisplays();
+      }
+    } catch (e) {}
   }
 
   function isJeedomValueActive(rawText, configuredTarget) {
@@ -866,6 +932,8 @@
 
       isJeedomStandby = alarmIsActive;
       checkStandbySchedule();
+      // Récupérer en même temps la vraie température du capteur extérieur Terrasse (ID 1599 par défaut)
+      pollJeedomTerraceTemp();
     } catch (err) {
       const isMixedContent =
         window.location.protocol === 'https:' &&
@@ -952,6 +1020,10 @@
 
   function startJeedomSchedule() {
     if (jeedomTimer) clearInterval(jeedomTimer);
+    // Même si la liaison alarme n'est pas cochée mais qu'on a une clé API, on lit quand même la sonde Terrasse 1599
+    if (state.jeedomApiKey) {
+      pollJeedomTerraceTemp();
+    }
     if (!state.jeedomEnabled) {
       dom.jeedomBadge.classList.add('hidden');
       return;
@@ -1054,8 +1126,9 @@
     const todayMin = daily.temperature_2m_min ? Math.round(daily.temperature_2m_min[0]) : '--';
     const todayMax = daily.temperature_2m_max ? Math.round(daily.temperature_2m_max[0]) : '--';
 
+    lastWeatherTemp = temp;
+
     dom.wmIcon.textContent = wmo.icon;
-    dom.wmTemp.textContent = `${temp}°C`;
     dom.wmDesc.textContent = wmo.label;
     dom.wmMinmax.textContent = `(${todayMin}° / ${todayMax}°)`;
     dom.wmCity.textContent = state.city;
@@ -1064,7 +1137,7 @@
     const nowTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     dom.stUpdated.textContent = `Actualisé à ${nowTime}`;
     dom.stIcon.textContent = wmo.icon;
-    dom.stTemp.textContent = `${temp}°C`;
+    updateTemperatureDisplays();
     dom.stDesc.textContent = wmo.label;
     dom.stFeels.textContent = `${feels}°C`;
     dom.stMinmax.textContent = `${todayMin}° / ${todayMax}°`;
@@ -1273,6 +1346,9 @@
     dom.jeedomUrl.value = state.jeedomUrl || 'http://192.168.1.23';
     dom.jeedomApiKey.value = state.jeedomApiKey || '';
     dom.jeedomCmdId.value = state.jeedomCmdId || '';
+    if (dom.jeedomTempCmdId) {
+      dom.jeedomTempCmdId.value = state.jeedomTempCmdId || '1599';
+    }
     dom.jeedomActiveVal.value = state.jeedomActiveVal || '1';
     dom.jeedomInterval.value = state.jeedomIntervalSec || 15;
     dom.jeedomStandbyMode.value = state.jeedomStandbyMode || 'blackout_auto';
@@ -1389,6 +1465,9 @@
     state.jeedomUrl = dom.jeedomUrl.value.trim() || 'http://192.168.1.23';
     state.jeedomApiKey = dom.jeedomApiKey.value.trim();
     state.jeedomCmdId = dom.jeedomCmdId.value.trim();
+    if (dom.jeedomTempCmdId) {
+      state.jeedomTempCmdId = dom.jeedomTempCmdId.value.trim() || '1599';
+    }
     state.jeedomActiveVal = dom.jeedomActiveVal.value.trim() || '1';
     state.jeedomIntervalSec = Math.max(5, Number(dom.jeedomInterval.value) || 15);
     state.jeedomStandbyMode = dom.jeedomStandbyMode.value;
